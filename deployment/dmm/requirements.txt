@@ -1,0 +1,4 @@
+elasticsearch
+slipstream-api
+flask
+requests
