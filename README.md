@@ -30,7 +30,7 @@ In order to successfully execute the application, you should have:
   1. Clone this repository with
 
      ```
-     $ git clone https://github.com/SimonNtz/SAR_framework.git
+     $ git clone https://github.com/SixSq/SAR-framework.git
      ```
 
   3. Set the environment variables
