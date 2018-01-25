@@ -1,5 +1,5 @@
-Sentinel 1 (SAR) framework
-===============================
+SENTINEL-1 (SAR) framework
+==========================
 
 This repo consists of a SAR product generation infrastructure designed for SLA
 enforcement. It is packaged in an Nuvla application. Its image processing job
