@@ -19,7 +19,7 @@ _get_cloud_hostname
 ss_username=`ss-get ss-username`
 ss_password=`ss-get ss-password`
 
-git clone git@github.com:SixSq/SAR-framework.git
+git clone https://github.com/SixSq/SAR-framework.git
 
 pip install -r ~/SAR-framework/deployment/dmm/requirements.txt
 
