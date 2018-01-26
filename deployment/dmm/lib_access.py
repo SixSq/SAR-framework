@@ -1,12 +1,15 @@
-from slipstream.api import Api
+"""
+This module provides methods to access and request SlipStream Service-Offers
+and also S3 buckets. The API and library used are respectively 'CIMI' and Boto.
+"""
 
-api = Api()
-api.login('username', 'password')
-'''
-	This module provides methods to access and request SlipStream Service-Offers
-	and also S3 buckets. The API and library used are respectively 'CIMI' and Boto.
-'''
-url = api.endpoint + "/api/service-offer?$filter="
+
+def _url(endpoint):
+    return endpoint + '/api/service-offer?$filter='
+
+
+def _request_url(api, resources):
+    return _url(api.endpoint) + resources[0:len(resources) - 4]
 
 
 def _check_str_list(data):
@@ -25,7 +28,7 @@ def _format_data_resource(data):
     return (["resource:class='%s.SAFE'" % prod.strip() for prod in data])
 
 
-def request_data(specs, data):
+def request_data(api, specs, data):
     """
     :param   specs: Specs used as filter to narrpw specifically the 'DATA' service-offer
     :type
@@ -40,26 +43,23 @@ def request_data(specs, data):
     for p in data_resource:
         temp = _join_attributes([p, specs_resource], 'and')
         resources = _join_attributes([temp, resources], 'or')
-    request = url + resources[0:len(resources) - 4]
+    request = _request_url(api, resources)
+    print 'request_data: ', request
+    return api.session.get(request).json()
 
-    print request
-    return (api.session.get(request).json())
 
-
-def request_vm(specs, clouds, orderby=True):
+def request_vm(api, specs, clouds, orderby=True):
     specs_resource = _join_attributes(specs, 'and')
     resources = ""
     # clouds      = _check_str_list(clouds)
     for c in clouds:
         temp = _join_attributes([c, specs_resource], 'and')
         resources = _join_attributes([temp, resources], 'or')
-
-    request = url + resources[0:len(resources) - 4]
+    request = _request_url(api, resources)
     if orderby:
         request += '&$orderby=price:unitCost'
-
-    print request
-    return (api.session.get(request).json())
+    print 'request_vm: ', request
+    return api.session.get(request).json()
 
 
 if __name__ == '__main__':

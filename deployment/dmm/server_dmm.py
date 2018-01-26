@@ -3,7 +3,7 @@ import os
 import time
 from pprint import pprint as pp
 
-from flask import Flask, url_for, request, Response, render_template
+from flask import Flask, request, Response, render_template
 from elasticsearch import Elasticsearch
 from slipstream.api import Api
 import boto
@@ -12,7 +12,7 @@ import requests
 from datetime import datetime
 from threading import Thread
 
-import lib_access as la
+import lib_access as sc
 import decision_making_module as dmm
 import summarizer as summarizer
 
@@ -152,7 +152,7 @@ def find_data_loc(prod_list):
     """
     prod_list = _check_str_list(prod_list)
     specs_data = ["resource:type='DATA'", "resource:platform='S3'"]
-    rep_so = la.request_data(specs_data, prod_list)['serviceOffers']
+    rep_so = sc.request_data(api, specs_data, prod_list)['serviceOffers']
     cloud_set = list(set([c['connector']['href'] for c in rep_so]))
     cloud_legit = []
     for c in cloud_set:
@@ -266,10 +266,10 @@ def _request_validation(request):
 def _components_service_offers(cloud, specs):
     cloud = [("connector/href='%s'" % cloud)]
     service_offers = {'mapper':
-                          la.request_vm(specs['mapper'],
+                          sc.request_vm(api, specs['mapper'],
                                         cloud)['serviceOffers'][0]['id'],
                       'reducer':
-                          la.request_vm(specs['reducer'],
+                          sc.request_vm(api, specs['reducer'],
                                         cloud)['serviceOffers'][0]['id']}
     return service_offers
 
