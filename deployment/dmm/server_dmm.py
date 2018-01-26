@@ -1,4 +1,3 @@
-import json
 import sys
 import os
 import time
@@ -53,14 +52,14 @@ def _format_specs(specs):
     return specs
 
 
-def get_vm_specs(id):
-    json = api.cimi_get(id).json
-    spec_keys = ['id',
-                 'resource:vcpu',
-                 'resource:ram',
-                 'resource:disk']
-    # 'resource:typeDisk'] Maybe SSD boost the process
-    return (tuple(v for k, v in json.items() if k in spec_keys))
+# def get_vm_specs(id):
+#     json = api.cimi_get(id).json
+#     spec_keys = ['id',
+#                  'resource:vcpu',
+#                  'resource:ram',
+#                  'resource:disk']
+#     # 'resource:typeDisk'] Maybe SSD boost the process
+#     return [v for k, v in json.items() if k in spec_keys]
 
 
 def download_product(bucket_id, output_id):
@@ -126,7 +125,7 @@ def wait_product(deployment_id, cloud, offer, time_limit):
     download_product(s3_credentials[1], output_id)
     summarizer.summarize_run(deployment_id, cloud, offer, ss_username, ss_password)
 
-    return ("Product %s delivered!" % outpud_id)
+    return "Product %s delivered!" % output_id
 
 
 def _all_products_on_cloud(c, rep_so, prod_list):
@@ -262,18 +261,17 @@ def _request_validation(request):
         _schema_validation(request.get_json())
     else:
         raise ValueError("Not a POST request")
-    return True
 
 
 def _components_service_offers(cloud, specs):
     cloud = [("connector/href='%s'" % cloud)]
-    serviceOffers = {'mapper':
-                         la.request_vm(specs['mapper'],
-                                       cloud)['serviceOffers'][0]['id'],
-                     'reducer':
-                         la.request_vm(specs['reducer'],
-                                       cloud)['serviceOffers'][0]['id']}
-    return serviceOffers
+    service_offers = {'mapper':
+                          la.request_vm(specs['mapper'],
+                                        cloud)['serviceOffers'][0]['id'],
+                      'reducer':
+                          la.request_vm(specs['reducer'],
+                                        cloud)['serviceOffers'][0]['id']}
+    return service_offers
 
 
 def deploy_run(cloud, product, serviceOffers, offer, time):
@@ -376,7 +374,6 @@ def sla_init():
         create_BDB(data_loc, specs_vm, product_list, offer)
         msg = "Cloud %s are currently benchmarked." % (',').join(data_loc)
         status = "201"
-
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
         status = "404"
@@ -430,8 +427,6 @@ def sla_cli():
         else:
             msg = "Data not found in clouds!\n"
             status = 412
-
-
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
         status = "404"
@@ -445,8 +440,5 @@ def sla_cli():
 if __name__ == '__main__':
     ss_username = sys.argv[1]
     ss_password = sys.argv[2]
-    api.login(ss_username, ss_password)
-    app.run(
-        host="0.0.0.0",
-        port=int("81")
-    )
+    api.login_internal(ss_username, ss_password)
+    app.run(host="0.0.0.0", port=int("81"))

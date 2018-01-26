@@ -2,3 +2,4 @@ elasticsearch
 slipstream-api
 flask
 requests
+boto
