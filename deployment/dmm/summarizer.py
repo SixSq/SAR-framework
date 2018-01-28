@@ -6,6 +6,9 @@ from collections import defaultdict
 
 from elasticsearch import Elasticsearch
 from slipstream.api import Api
+from log import get_logger
+
+logger = get_logger(name='summarizer')
 
 api = Api()
 server_host = 'localhost'
@@ -121,28 +124,25 @@ def _get_specs(id):
 def get_price(ids, time_records):
     mapper_multiplicity = len(time_records['mapper'])
     time = time_records['total']
-    print mapper_multiplicity
     try:
         mapper_unit_price = float(api.cimi_get(ids[0]).json['price:unitCost'])
         reducer_unit_price = float(api.cimi_get(ids[1]).json['price:unitCost'])
-        print "mmaper price:" + str(mapper_unit_price)
+        logger.info("Mapper price:" + str(mapper_unit_price))
     except TypeError:
-        print "No princing available"
+        logger.warn("No pricing available.")
         return 0
 
     if api.cimi_get(ids[0]).json['price:billingPeriodCode'] == 'HUR':
         time = math.ceil(float(time / 3600))
-        print time
     else:
         time = float(time / 3600)
-        print "time is:" + str(time)
     cost = time * ((mapper_unit_price * mapper_multiplicity)
                    + reducer_unit_price)
     return cost
 
 
 def _extract_field(data, field):
-    return ([v['_source'][field] for v in data.values()])
+    return [v['_source'][field] for v in data.values()]
 
 
 def _filter_field(hits, field, value):

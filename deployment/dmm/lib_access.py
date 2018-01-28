@@ -3,6 +3,10 @@ This module provides methods to access and request SlipStream Service-Offers
 and also S3 buckets. The API and library used are respectively 'CIMI' and Boto.
 """
 
+from log import get_logger
+
+logger = get_logger(name='lib-data-access')
+
 
 def _url(endpoint):
     return endpoint + '/api/service-offer?$filter='
@@ -44,7 +48,7 @@ def request_data(api, specs, data):
         temp = _join_attributes([p, specs_resource], 'and')
         resources = _join_attributes([temp, resources], 'or')
     request = _request_url(api, resources)
-    print 'request_data: ', request
+    logger.info('request_data: ', request)
     return api.session.get(request).json()
 
 
@@ -58,7 +62,7 @@ def request_vm(api, specs, clouds, orderby=True):
     request = _request_url(api, resources)
     if orderby:
         request += '&$orderby=price:unitCost'
-    print 'request_vm: ', request
+    logger.info('request_vm: ', request)
     return api.session.get(request).json()
 
 

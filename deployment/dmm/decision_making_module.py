@@ -1,10 +1,14 @@
 from __future__ import division
+
+import math
+
 from elasticsearch import Elasticsearch
 from slipstream.api import Api
 import server_dmm as srv_dmm
 import summarizer as summ
-import math
-from pprint import pprint as pp
+from log import get_logger
+
+logger = get_logger(name='dmm')
 
 api = Api()
 index = 'sar'
@@ -46,18 +50,14 @@ def dmm(cloud, time, offer, ss_username, ss_password):
     api.login(ss_username, ss_password)
     ranking = []
     for c in cloud:
-        rep = query_db(c, time, offer)
-        if rep['_source']:
-            pp(rep['_source']['CannedOffer_1'])
-            past_time = rep['_source'][offer]['time_records']
-            print "ratio comp"
-            print time
-            print past_time['total']
+        resp = query_db(c, time, offer)
+        if resp['_source']:
+            logger.info("CannedOffer_1: %s" % resp['_source']['CannedOffer_1'])
+            past_time = resp['_source'][offer]['time_records']
             ratio = math.ceil(float(past_time['total'] / time))
-            print ratio
-            specs = rep['_source'][offer]['components']
+            specs = resp['_source'][offer]['components']
             specs['mapper'] = _prod_spec(ratio, specs['mapper'])
-            pp(specs)
+            logger.info("Spec: %s" % specs)
             specs = srv_dmm._format_specs(specs)
             # specs['mapper'] = math.ceil(ratio * float(specs['mapper'][0:3]))
 

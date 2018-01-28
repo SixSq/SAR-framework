@@ -1,7 +1,6 @@
 import sys
 import os
 import time
-from pprint import pprint as pp
 
 from flask import Flask, request, Response, render_template
 from elasticsearch import Elasticsearch
@@ -15,6 +14,9 @@ from threading import Thread
 import lib_access as sc
 import decision_making_module as dmm
 import summarizer as summarizer
+from log import get_logger
+
+logger = get_logger(name='dmm-server')
 
 # -*- coding: utf-8 -*-
 app = Flask(__name__)
@@ -79,14 +81,14 @@ def download_product(bucket_id, output_id):
     output_path = os.getcwd() + output_id
     key.get_contents_to_filename(output_path)
 
-    print "Product stored @ %s." % output_id
+    logger.info("Product stored @ %s." % output_id)
 
 
 def cancel_deployment(deployment_id):
     api.terminate(deployment_id)
     state = api.get_deployment(deployment_id)[2]
     while state != 'cancelled':
-        print "Terminating deployment %s." % deployment_id
+        logger.info("Terminating deployment %s." % deployment_id)
         time.sleep(5)
         api.terminate(deployment_id)
 
@@ -111,9 +113,8 @@ def wait_product(deployment_id, cloud, offer, time_limit):
     while state != "ready" and not output_id:
         deployment_data = api.get_deployment(deployment_id)
         t = watch_execution_time(deployment_data[3])
-        print "Waiting state ready. Currently in state: \
-%s Time elapsed: %s seconds" % (state, t)
-        print "SLA time bound left: %d" % (int(time_limit) - int(t))
+        logger.info("Waiting state ready. Currently in state: %s Time elapsed: %s seconds" % (state, t))
+        logger.info("SLA time bound left: %d" % (int(time_limit) - int(t)))
         if (t >= time_limit) or (state == ("cancelled" or "aborted")):
             cancel_deployment(deployment_id)
             return ("SLA time bound exceeded. Deployment is cancelled.")
@@ -129,8 +130,6 @@ def wait_product(deployment_id, cloud, offer, time_limit):
 
 
 def _all_products_on_cloud(c, rep_so, prod_list):
-    print c
-    print prod_list
     products_cloud = ['xXX' for so in rep_so if so['connector']['href'] == c]
 
     return len(products_cloud) >= len(prod_list)
@@ -196,16 +195,14 @@ def _schema_validation(jsonData):
 
 def populate_db(index, id=""):
     if not id:
-        rep = res.indices.create(index=index,
-                                 ignore=400)
-        print "Create index"
+        rep = res.indices.create(index=index, ignore=400)
+        logger.info("Create index %s" % index)
     else:
         rep = res.index(index=index,
                         doc_type="eo-proc",
                         id=id,
                         body={})
-        print "Create document %s: " % id
-    print rep
+        logger.info("Create document %s: " % id)
     return rep
 
 
@@ -219,8 +216,8 @@ def create_BDB(clouds, specs_vm, product_list, offer):
         populate_db(index, c)
         serviceOffers = _components_service_offers(c, specs_vm)
         deployment_id = deploy_run(c, product_list, serviceOffers, offer, 9999)
-        print "Deploy run: %s on cloud %s with service offers %s" \
-              % (deployment_id, c, str(serviceOffers))
+        logger.info("Deploy run: %s on cloud %s with service offers %s" %
+                    (deployment_id, c, str(serviceOffers)))
 
 
 def _check_BDB_cloud(index, clouds):
@@ -303,7 +300,7 @@ def deploy_run(cloud, product, serviceOffers, offer, time):
         daemon_watcher.setDaemon(True)
         daemon_watcher.start()
     else:
-        print("No corresponding instances type found on connector %s" % cloud)
+        logger.warn("No corresponding instances type found on connector %s" % cloud)
     return deploy_id
 
 
@@ -314,13 +311,18 @@ def get_user_connectors(user):
 
 @app.route('/SLA_COST', methods=['GET'])
 def sla_cost():
-    cloud = get_user_connectors('simon1992')
     data_admin = {}
-    for c in cloud:
+    for c in get_user_connectors(ss_username):
         req = '/'.join([elastic_host, 'sar', doc_type, c])
         item = requests.get(req).json()
+        logger.info(item)
+        if item.get('status') != 200:
+            error_msg = 'Failed getting data from backend.'
+            error = {'error': error_msg, 'reason': item['error']['reason']}
+            logger.warn(error)
+            return Response(error_msg, status=500)
         if item['found']:
-            pp(item)
+            logger.info('SLA cost found item: %' % item)
             item = item['_source']
             for k, v in item.items():
                 specs = _format_specs(v['components'])
@@ -329,16 +331,14 @@ def sla_cost():
         data_admin[c] = item
 
     resp = Response(data_admin, status=200, mimetype='application/json')
-    resp.headers['Link'] = 'http://sixsq.eoproc.com'
     return resp
-    # return "check"
 
 
-''' initialization from the system admin :
+''' initialization by the system admin :
 
     : Inputs specs and products
 
-    : Verify if the DB is on
+    : Verify if the DB is running
     : Find the connector to cloud where the
     data is localized
 
@@ -360,27 +360,26 @@ def sla_init():
     global s3_credentials
     s3_credentials = data['result']['s3_credentials']
     offer = "CannedOffer_1"
-    print "Instance sizes: " + str(specs_vm)
+    logger.info("Instance sizes: " + str(specs_vm))
 
     try:
         _check_BDB_state()
         data_loc = find_data_loc(product_list)
-        user_cloud = str(get_user_connectors('simon1992'))
-        data_loc = [c for c in data_loc if c in user_cloud]
+        user_clouds = str(get_user_connectors(ss_username))
+        data_loc = [c for c in data_loc if c in user_clouds]
         if not data_loc:
             raise ValueError("The data has not been found in any connector \
                              associated with the Nuvla account")
-        print "Data located in: %s" % data_loc
+        logger.info("Data located in: %s" % data_loc)
         create_BDB(data_loc, specs_vm, product_list, offer)
         msg = "Cloud %s are currently benchmarked." % (',').join(data_loc)
         status = "201"
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
         status = "404"
-        print("Value error: {0} ".format(err))
+        logger.info("Value error: {0} ".format(err))
 
     resp = Response(msg, status=status, mimetype='application/json')
-    resp.headers['Link'] = 'http://sixsq.eoproc.com'
     return resp
 
 
@@ -396,14 +395,14 @@ def sla_cli():
         global s3_credentials
         s3_credentials = data['result']['s3_credentials']
 
-        pp(sla)
+        logger.info("SLA: %s" % sla)
         product_list = sla['product_list']
         time = sla['requirements'][0]
         offer = sla['requirements'][1]
         data_loc = find_data_loc(product_list)
-        print "Data located in: %s" % data_loc
+        logger.info("Data located in: %s" % data_loc)
         data_loc = _check_BDB_cloud(index, data_loc)
-        print "Benchmark run located in: %s" % data_loc
+        logger.info("Benchmark run located in: %s" % data_loc)
         msg = ""
         status = ""
 
@@ -414,8 +413,7 @@ def sla_cli():
             status = "201"
             winner = ranking[0]
 
-            print "ranking: "
-            print ranking[0:3]
+            logger.info("ranking: %s" % ranking[0:3])
             serviceOffers = {'mapper': winner[1],
                              'reducer': winner[2]}
             deploy_run(winner[0],
@@ -430,10 +428,9 @@ def sla_cli():
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
         status = "404"
-        print("Value error: {0} ".format(err))
+        logger.info("Value error: {0} ".format(err))
 
     resp = Response(msg, status=status, mimetype='application/json')
-    resp.headers['Link'] = 'http://sixsq.eoproc.com'
     return resp
 
 
