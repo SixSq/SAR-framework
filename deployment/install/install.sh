@@ -12,4 +12,5 @@ apt-get install -y \
     nginx \
     apache2-utils \
     python-pip \
+    nmap \
     git
