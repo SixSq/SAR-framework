@@ -16,3 +16,7 @@ cd $SAR_PATH/deployment/dmm/
 python server_dmm.py \
     $ss_username \
     $ss_password &
+
+url=http://$(ss-get hostname)
+ss-set url.service "${url}"
+ss-set ss:url.service "${url}"
