@@ -116,9 +116,9 @@ config_nginx() {
     cat >/etc/nginx/sites-available/kibana<<'EOF'
 server {
     listen 80;
-    server_name elk-stack.co;
+    server_name dmm.eo;
 
-    location /kibana {
+    location /kibana/ {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -127,6 +127,16 @@ server {
 
         proxy_pass http://localhost:5601/;
         rewrite ^/kibana/(.*)$ /$1 break;
+    }
+
+    location /dmm/ {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+
+        proxy_pass http://localhost:8080/;
     }
 }
 EOF
