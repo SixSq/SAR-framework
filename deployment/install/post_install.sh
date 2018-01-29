@@ -67,7 +67,7 @@ EOF
 
     systemctl enable kibana
     systemctl start kibana
-    _wait_listens 127.0.0.1 5601
+    _wait_listens 127.0.0.1 5601 120
 }
 
 config_logstash() {
