@@ -53,10 +53,16 @@ EOF
 }
 
 config_kibana() {
-    cat >>/etc/kibana/kibana.yml<<EOF
+
+    mkdir -p /var/log/kibana
+    chown kibana /var/log/kibana
+
+    cat >/etc/kibana/kibana.yml<<EOF
 server.port: 5601
 server.host: "localhost"
 elasticsearch.url: "http://localhost:9200"
+server.basePath: "/kibana"
+logging.dest: /var/log/kibana/kibana.log
 EOF
 
     systemctl enable kibana
@@ -102,11 +108,12 @@ EOF
 
     systemctl enable logstash
     systemctl start logstash
-    _wait_listens 127.0.0.1 5443
+    # FIXME: logstash resets the connection after binding of the ncat client.
+    # _wait_listens 127.0.0.1 5443
 }
 
 config_nginx() {
-    cat >/etc/nginx/sites-available/kibana<<EOF
+    cat >/etc/nginx/sites-available/kibana<<'EOF'
 server {
     listen 80;
     server_name elk-stack.co;
