@@ -3,78 +3,69 @@
 set -e
 set -x
 
+function abort() {
+    echo "!!! Aborting: $@"
+    exit 1
+}
 
-cd /etc/elasticsearch/
-cat >>elasticsearch.yml<<EOF
+function _now_sec() {
+    date +%s
+}
+
+function _wait_listens() {
+    # host port [timeout seconds] [sleep interval seconds]
+    wait_time=${3:-60}
+    sleep_interval=${4:-2}
+    stop_time=$(($(_now_sec) + $wait_time))
+    while (( "$(_now_sec)" <= $stop_time )); do
+        set +e
+        res=$(ncat -v -4 $1 $2 < /dev/null 2>&1)
+        if [ "$?" == "0" ]; then
+            return 0
+        else
+            if ( ! (echo $res | grep -q "Connection refused") ); then
+                abort "Failed to check $1:$2 with:" $res
+            fi
+        fi
+        set -e
+        sleep $sleep_interval
+    done
+    abort "Timed out after ${wait_time} sec waiting for $1:$2"
+}
+
+config_elasticsearch() {
+    sed -i 's/^-Xms.*/-Xms256m/' /etc/elasticsearch/jvm.options
+    sed -i 's/^-Xmx.*/-Xmx1g/' /etc/elasticsearch/jvm.options
+    cat >>/etc/elasticsearch/elasticsearch.yml<<EOF
 bootstrap.memory_lock: true
 network.host: localhost
 http.port: 9200
 EOF
 
-echo 'LimitMEMLOCK=infinity' >> /usr/lib/systemd/system/elasticsearch.service
-echo 'MAX_LOCKED_MEMORY=unlimited' >> /etc/default/elasticsearch
+    echo 'LimitMEMLOCK=infinity' >> /usr/lib/systemd/system/elasticsearch.service
+    echo 'MAX_LOCKED_MEMORY=unlimited' >> /etc/default/elasticsearch
 
-systemctl daemon-reload
-systemctl enable elasticsearch
-systemctl start elasticsearch
+    systemctl daemon-reload
+    systemctl enable elasticsearch
+    systemctl start elasticsearch
+    _wait_listens 127.0.0.1 9200
+    curl -XGET 'localhost:9200/?pretty'
+}
 
-#sleep 10
-#exec 6<>/dev/tcp/127.0.0.1/9200 || echo "Elastic server is not listenining !"
-
-#curl -XGET 'localhost:9200/_nodes?filter_path=**.mlockall&pretty'
-#curl -XGET 'localhost:9200/?pretty'
-
-#apt-get install -y kibana
-
-cat >>/etc/kibana/kibana.yml<<EOF
+config_kibana() {
+    cat >>/etc/kibana/kibana.yml<<EOF
 server.port: 5601
 server.host: "localhost"
 elasticsearch.url: "http://localhost:9200"
 EOF
 
-systemctl enable kibana
-systemctl start kibana
-
-#sleep 10
-#exec 6<>/dev/tcp/127.0.0.1/5601 || echo "Kibana service is not listenining !"
-
-#apt-get install -y nginx apache2-utils
-
-cd /etc/nginx/
-
-cat >>sites-available/kibana<<EOF
-server {
-    listen 80;
-    server_name elk-stack.co;
-
-    location / {
-        proxy_pass http://localhost:5601;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-    }
+    systemctl enable kibana
+    systemctl start kibana
+    _wait_listens 127.0.0.1 5601
 }
-EOF
 
-
-if [ -f /etc/nginx/sites-available/default ]; then
-    mv /etc/nginx/sites-available/default /etc/nginx/sites-available/default.disabled
-    ln -s /etc/nginx/sites-available/kibana /etc/nginx/sites-enabled/
-fi
-
-
-nginx -t
-systemctl enable nginx
-systemctl restart nginx
-
-#sleep 5
-#exec 6<>/dev/tcp/127.0.0.1/9200 || echo "Nginx server is not listenining !"
-
-cd /etc/logstash/
-
-cat >>conf.d/filebeat-input.conf<<EOF
+config_logstash() {
+    cat >>/etc/logstash/conf.d/filebeat-input.conf<<EOF
 input {
   beats {
     port => 5443
@@ -83,7 +74,7 @@ input {
 }
 EOF
 
-cat >>conf.d/syslog-filter.conf<<EOF
+    cat >>/etc/logstash/conf.d/syslog-filter.conf<<EOF
 filter {
   if [type] == "syslog" {
     grok {
@@ -98,7 +89,7 @@ filter {
 }
 EOF
 
-cat >>conf.d/output-elasticsearch.conf<<EOF
+    cat >>/etc/logstash/conf.d/output-elasticsearch.conf<<EOF
 output {
   elasticsearch { hosts => ["localhost:9200"]
     hosts => "localhost:9200"
@@ -109,11 +100,41 @@ output {
 }
 EOF
 
-systemctl enable logstash
-systemctl start logstash
+    systemctl enable logstash
+    systemctl start logstash
+    _wait_listens 127.0.0.1 5443
+}
 
-#sleep 10
-#exec 6<>/dev/tcp/127.0.0.1/5443 || echo "Logstash service is not listenining !"
+config_nginx() {
+    cat >/etc/nginx/sites-available/kibana<<EOF
+server {
+    listen 80;
+    server_name elk-stack.co;
 
+    location /kibana {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+
+        proxy_pass http://localhost:5601/;
+        rewrite ^/kibana/(.*)$ /$1 break;
+    }
+}
+EOF
+    ln -s /etc/nginx/sites-available/kibana /etc/nginx/sites-enabled/
+
+    rm -f /etc/nginx/sites-enabled/default
+
+    nginx -t
+    systemctl enable nginx
+    systemctl restart nginx
+}
+
+config_elasticsearch
+config_logstash
+config_kibana
+config_nginx
 
 sudo rm -rf /var/lib/cloud/instance/sem/*
