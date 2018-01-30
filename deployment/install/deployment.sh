@@ -17,6 +17,9 @@ python server_dmm.py \
     $ss_username \
     $ss_password &
 
+# FIXME: remove when SS client is running in virtualenv.
+pip install slipstream-client
+
 url=http://$(ss-get hostname)
 ss-set url.service "${url}"
 ss-set ss:url.service "${url}"
