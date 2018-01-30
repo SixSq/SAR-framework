@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import traceback
 
 from flask import Flask, request, Response, render_template
 from elasticsearch import Elasticsearch
@@ -50,7 +51,6 @@ def _format_specs(specs):
         specs[k][0] = ("resource:vcpu='%d'" % v[0])
         specs[k][1] = ("resource:ram>'%d'" % int(v[1] - 1))
         specs[k][2] = ("resource:disk>'%d'" % int(v[2] - 1))
-
     return specs
 
 
@@ -309,6 +309,14 @@ def get_user_connectors(user):
     return list(cloud_set)
 
 
+@app.errorhandler(500)
+def internal_error(exception):
+    logger.error(traceback.format_exc())
+    msg = 'Internal server error.'
+    resp = Response(msg, status=500, mimetype='plain/text')
+    return resp
+
+
 @app.route('/cost', methods=['GET'])
 def sla_cost():
     data_admin = {}
@@ -354,7 +362,7 @@ def sla_cost():
 
 @app.route('/init', methods=['POST'])
 def sla_init():
-    data = request.get_json()
+    data = request.get_json(force=True)
     product_list = data['product_list']
     specs_vm = _format_specs(data['specs_vm'])
     global s3_credentials

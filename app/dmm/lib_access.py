@@ -48,7 +48,7 @@ def request_data(api, specs, data):
         temp = _join_attributes([p, specs_resource], 'and')
         resources = _join_attributes([temp, resources], 'or')
     request = _request_url(api, resources)
-    logger.info('request_data: ', request)
+    logger.info('request_data: %s' % request)
     return api.session.get(request).json()
 
 
@@ -62,7 +62,7 @@ def request_vm(api, specs, clouds, orderby=True):
     request = _request_url(api, resources)
     if orderby:
         request += '&$orderby=price:unitCost'
-    logger.info('request_vm: ', request)
+    logger.info('request_vm: %s' % request)
     return api.session.get(request).json()
 
 
