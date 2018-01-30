@@ -438,4 +438,4 @@ if __name__ == '__main__':
     ss_username = sys.argv[1]
     ss_password = sys.argv[2]
     api.login_internal(ss_username, ss_password)
-    app.run(host="0.0.0.0", port=int("81"))
+    app.run(host="127.0.0.1", port=int("8080"))

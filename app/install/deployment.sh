@@ -10,9 +10,9 @@ SAR_PATH=~/SAR-framework
 
 git clone https://github.com/SixSq/SAR-framework.git $SAR_PATH
 
-pip install -r $SAR_PATH/deployment/dmm/requirements.txt
+pip install -r $SAR_PATH/app/dmm/requirements.txt
 
-cd $SAR_PATH/deployment/dmm/
+cd $SAR_PATH/app/dmm/
 python server_dmm.py \
     $ss_username \
     $ss_password &
