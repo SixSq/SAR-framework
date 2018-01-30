@@ -309,7 +309,7 @@ def get_user_connectors(user):
     return list(cloud_set)
 
 
-@app.route('/SLA_COST', methods=['GET'])
+@app.route('/cost', methods=['GET'])
 def sla_cost():
     data_admin = {}
     for c in get_user_connectors(ss_username):
@@ -352,7 +352,7 @@ def sla_cost():
 '''
 
 
-@app.route('/SLA_INIT', methods=['POST'])
+@app.route('/init', methods=['POST'])
 def sla_init():
     data = request.get_json()
     product_list = data['product_list']
@@ -383,7 +383,7 @@ def sla_init():
     return resp
 
 
-@app.route('/SLA_CLI', methods=['POST'])
+@app.route('/cli', methods=['POST'])
 def sla_cli():
     index = 'sar'
 
