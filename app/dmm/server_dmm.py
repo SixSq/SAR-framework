@@ -3,6 +3,8 @@ import os
 import time
 import traceback
 
+from ConfigParser import SafeConfigParser
+
 from flask import Flask, request, Response, send_from_directory
 from elasticsearch import Elasticsearch
 from slipstream.api import Api
@@ -19,7 +21,10 @@ from log import get_logger
 
 logger = get_logger(name='dmm-server')
 
-# -*- coding: utf-8 -*-
+CONFIG_FILE = 'dmm.conf'
+
+config_parser = None
+
 app = Flask(__name__, static_url_path='')
 api = Api()
 elastic_host = 'http://localhost:9200'
@@ -115,11 +120,14 @@ def wait_product(deployment_id, cloud, offer, time_limit):
     deployment_data = api.get_deployment(deployment_id)
     state = deployment_data[2]
     output_id = ""
+    state_final = 'ready'
 
-    while state != "ready" and not output_id:
+    while state != state_final and not output_id:
         deployment_data = api.get_deployment(deployment_id)
+        logger.info('Deployment data: %s' % deployment_data)
         t = watch_execution_time(deployment_data[3])
-        logger.info("Waiting state ready. Currently in state: %s Time elapsed: %s seconds" % (state, t))
+        logger.info("Deployment '%s' in state '%s' (waiting for %s). Time elapsed: %s seconds" %
+                    (deployment_id, state, state_final, t))
         logger.info("SLA time bound left: %d" % (int(time_limit) - int(t)))
         if (t >= time_limit) or (state == ("cancelled" or "aborted")):
             cancel_deployment(deployment_id)
@@ -220,10 +228,10 @@ def create_BDB(clouds, specs_vm, product_list, offer):
 
     for c in clouds:
         populate_db(index, c)
-        serviceOffers = _components_service_offers(c, specs_vm)
-        deployment_id = deploy_run(c, product_list, serviceOffers, offer, 9999)
-        logger.info("Deploy run: %s on cloud %s with service offers %s" %
-                    (deployment_id, c, str(serviceOffers)))
+        service_offers = _components_service_offers(c, specs_vm)
+        deployment_id = deploy_run(c, product_list, service_offers, offer, 9999)
+        logger.info("Deployed run: %s on cloud %s with service offers %s" %
+                    (deployment_id, c, str(service_offers)))
 
 
 def _check_BDB_cloud(index, clouds):
@@ -277,15 +285,11 @@ def _components_service_offers(cloud, specs):
     return service_offers
 
 
-def deploy_run(cloud, product, serviceOffers, offer, time):
-    mapper_so = "service-offer/cc382a2d-20f4-499d-82c2-046873e0cd05"
-    reducer_so = "service-offer/cc382a2d-20f4-499d-82c2-046873e0cd05"
-    cloud = "eo-cesnet-cz1"
-
-    server_ip = sys.argv[3]
-    server_hostname = sys.argv[4]
-    # mapper_so =  serviceOffers['mapper']
-    # reducer_so =  serviceOffers['reducer']
+def deploy_run(cloud, product, service_offers, offer, time):
+    server_ip = config_get('dmm_ip')
+    server_hostname = config_get('dmm_hostname')
+    mapper_so = service_offers['mapper']
+    reducer_so = service_offers['reducer']
 
     deploy_id = "Not deployed"
     if mapper_so and reducer_so:
@@ -386,7 +390,7 @@ def sla_init():
                              associated with the Nuvla account")
         logger.info("Data located in: %s" % data_loc)
         create_BDB(data_loc, specs_vm, product_list, offer)
-        msg = "Cloud %s are currently benchmarked." % (',').join(data_loc)
+        msg = "Cloud %s are currently benchmarked." % (', ').join(data_loc)
         status = "201"
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
@@ -448,8 +452,22 @@ def sla_cli():
     return resp
 
 
+def get_conf_parser(fn):
+    global config_parser
+    if config_parser is None:
+        config_parser = SafeConfigParser()
+        config_parser.optionxform = str
+        config_parser.read(fn)
+    return config_parser
+
+
+def config_get(opt, default=''):
+    parser = get_conf_parser(CONFIG_FILE)
+    return parser.get('default', opt, default)
+
+
 if __name__ == '__main__':
-    ss_username = sys.argv[1]
-    ss_password = sys.argv[2]
+    ss_username = config_get('ss_username')
+    ss_password = config_get('ss_password')
     api.login_internal(ss_username, ss_password)
     app.run(host="127.0.0.1", port=int("8080"))
