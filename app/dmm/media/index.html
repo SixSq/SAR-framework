@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EO Proc DMM</title>
+</head>
+<body>
+<p>
+    Earth Observation data processing decision making module.
+</p>
+<p>
+    The following resources are available.
+</p>
+<div>
+    <ul>
+        <li>
+            <a href="run">/run</a> Run product generation algorithm. POST on /run with JSON document.
+        </li>
+        <li>
+            <a href="init">/init</a> Initialize benchmarking DB. POST on /init with JSON document.
+        </li>
+        <li>
+            <a href="cost">/cost</a> Compute provisional cost for product generation. GET on /cost with JSON
+            document.
+        </li>
+    </ul>
+</div>
+<img src="media/framework-arch.png" width="875" height="600"/>
+</body>
+</html>

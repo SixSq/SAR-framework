@@ -114,7 +114,8 @@ EOF
 }
 
 config_nginx() {
-    cat >/etc/nginx/sites-available/kibana<<'EOF'
+    site_path=/etc/nginx/sites-available/dmm
+    cat >$site_path<<'EOF'
 server {
     listen 80;
     server_name dmm.eo;
@@ -141,7 +142,7 @@ server {
     }
 }
 EOF
-    ln -s /etc/nginx/sites-available/kibana /etc/nginx/sites-enabled/
+    ln -s $site_path /etc/nginx/sites-enabled/
 
     rm -f /etc/nginx/sites-enabled/default
 

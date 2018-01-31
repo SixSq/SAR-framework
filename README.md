@@ -76,7 +76,7 @@ In order to successfully execute the application, you should have:
     - Product generation with SLA:
 
     ```
-    curl -H "Content-Type: application/json" -X POST http://<server_ip>/dmm/cli -d
+    curl -H "Content-Type: application/json" -X POST http://<server_ip>/dmm/run -d
      '{
        "SLA":{
          "requirements": [

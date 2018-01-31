@@ -3,7 +3,7 @@ import os
 import time
 import traceback
 
-from flask import Flask, request, Response, render_template
+from flask import Flask, request, Response, send_from_directory
 from elasticsearch import Elasticsearch
 from slipstream.api import Api
 import boto
@@ -20,7 +20,7 @@ from log import get_logger
 logger = get_logger(name='dmm-server')
 
 # -*- coding: utf-8 -*-
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='')
 api = Api()
 elastic_host = 'http://localhost:9200'
 doc_type = 'eo-proc'
@@ -29,8 +29,14 @@ res = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
 
 @app.route('/')
-def form():
-    return render_template('form_submit.html')
+def root():
+    with open('media/index.html') as fd:
+        return Response(fd.read(), status=200)
+
+
+@app.route('/media/<path:path>')
+def send_media(path):
+    return send_from_directory('media', path)
 
 
 def connect_s3():
@@ -391,7 +397,7 @@ def sla_init():
     return resp
 
 
-@app.route('/cli', methods=['POST'])
+@app.route('/run', methods=['POST'])
 def sla_cli():
     index = 'sar'
 
