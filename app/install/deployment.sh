@@ -17,9 +17,9 @@ pip install -r $SAR_PATH/app/dmm/requirements.txt
 
 cd $SAR_PATH/app/dmm/
 sed -i -e 's/<SS_USERNAME>/'$ss_username'/' \
-       -e 's/<SS_USERNAME>/'$ss_password'/' \
+       -e 's/<SS_PASSWORD>/'$ss_password'/' \
        -e 's/<DMM_IP>/'$hostip'/' \
-       -e 's/<DMM_NAME>/'$hostname'/' \
+       -e 's/<DMM_HOSTNAME>'$hostname'/' \
        dmm.conf
 python server_dmm.py &
 
