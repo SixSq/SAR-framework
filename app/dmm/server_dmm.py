@@ -285,7 +285,7 @@ def _components_service_offers(cloud, specs):
     return service_offers
 
 
-def deploy_run(cloud, product, service_offers, offer, time):
+def deploy_run(cloud, product, service_offers, offer, timeout):
     server_ip = config_get('dmm_ip')
     server_hostname = config_get('dmm_hostname')
     mapper_so = service_offers['mapper']
@@ -293,24 +293,33 @@ def deploy_run(cloud, product, service_offers, offer, time):
 
     deploy_id = "Not deployed"
     if mapper_so and reducer_so:
-        deploy_id = api.deploy('EO_Sentinel_1/procSAR',
-                               cloud={'mapper': cloud, 'reducer': cloud},
-                               parameters={'mapper': {'service-offer': mapper_so,
-                                                      'product-list': ' '.join(product),
-                                                      'server_hn': server_hostname,
-                                                      'server_ip': server_ip},
-                                           'reducer': {'service-offer': reducer_so,
-                                                       'server_hn': server_hostname,
-                                                       'server_ip': server_ip}},
-                               multiplicity={'mapper': len(product),
-                                             'reducer': 1},
-                               tags='EOproc', keep_running='never')
-
-        daemon_watcher = Thread(target=wait_product, args=(deploy_id, cloud, offer, time))
+        proc_module = config_get('ss_module_proc_sar')
+        comps_clouds = {'mapper': cloud, 'reducer': cloud}
+        # FIXME: need to provide user's S3 endpoint, bucket and creds for results.
+        comps_params = {'mapper': {'service-offer': mapper_so,
+                                   'product-list': ' '.join(product),
+                                   'server_hn': server_hostname,
+                                   'server_ip': server_ip},
+                        'reducer': {'service-offer': reducer_so,
+                                    'server_hn': server_hostname,
+                                    'server_ip': server_ip}}
+        comps_counts = {'mapper': len(product),
+                        'reducer': 1}
+        logger.info('Deploying: on "%s" with params "%s" and multiplicity "%s".' %
+                    (comps_clouds, comps_params, comps_counts))
+        deploy_id = api.deploy(proc_module,
+                               cloud=comps_clouds,
+                               parameters=comps_params,
+                               multiplicity=comps_counts,
+                               tags='EOproc',
+                               keep_running='never')
+        daemon_watcher = Thread(target=wait_product, args=(deploy_id, cloud,
+                                                           offer, timeout))
         daemon_watcher.setDaemon(True)
         daemon_watcher.start()
     else:
-        logger.warn("No corresponding instances type found on connector %s" % cloud)
+        logger.warn("No suitable instance types found for mapper and reducer "
+                    "on cloud %s" % cloud)
     return deploy_id
 
 
