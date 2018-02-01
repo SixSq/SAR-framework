@@ -172,35 +172,31 @@ def find_data_loc(prod_list):
         if _all_products_on_cloud(c, rep_so, prod_list):
             cloud_legit.append(c)
     _check_str_list(cloud_legit)
-    return (cloud_legit)
+    return cloud_legit
 
 
-def _schema_validation(jsonData):
-    """
-    Input data Schema:
-    - A JSON with top hierarchy 'SLA' and 'results' dicts:
-
-    jsonData = {'SLA':dict, 'result':dict}
-
-    dict('SLA')    = {'requirements':['time','price', 'resolution'], 'order':['prod_list']}
+def _schema_validation(reqs):
+    """Validates if SLA and results store coordinates are provided with the request.
+    reqs: {'SLA': {}, 'result': {}}
+    dict('SLA')    = {'requirements':['time', 'price', 'resolution'], 'product_list':['prod_list']}
     dict('result') = {'s3_credentials':[host, bucket, api-key, secret_key]}
     """
-    if not "SLA" in jsonData:
+    if "SLA" not in reqs:
         raise ValueError("No 'SLA' in given data")
-    if not "result" in jsonData:
+    if "result" not in reqs:
         raise ValueError("No 'result' in given data")
-    for k, v in jsonData.items():
+    for k, v in reqs.items():
         if not isinstance(v, dict):
             raise ValueError("%s is not a dict in given data" % k)
 
-    SLA = jsonData['SLA']
+    sla = reqs['SLA']
 
-    if not "product_list" in SLA:
+    if "product_list" not in sla:
         raise ValueError("Missing product list in given SLA data")
-    if not "requirements" in SLA:
+    if "requirements" not in sla:
         raise ValueError("Missing requirements in given SLA data")
 
-    for k, v in jsonData['SLA'].items():
+    for k, v in reqs['SLA'].items():
         if not isinstance(v, list):
             raise ValueError("%s is not a list in given data" % k)
 
@@ -220,18 +216,21 @@ def populate_db(index, id=""):
     return rep
 
 
-def create_BDB(clouds, specs_vm, product_list, offer):
+def run_benchmarks(clouds, specs_vm, product_list, offer):
     index = 'sar'
     req_index = requests.get(elastic_host + '/' + index)
     if not req_index:
         populate_db(index)
 
+    deployments = []
     for c in clouds:
         populate_db(index, c)
         service_offers = _components_service_offers(c, specs_vm)
         deployment_id = deploy_run(c, product_list, service_offers, offer, 9999)
         logger.info("Deployed run: %s on cloud %s with service offers %s" %
                     (deployment_id, c, str(service_offers)))
+        deployments.append(deployment_id)
+    return deployments
 
 
 def _check_BDB_cloud(index, clouds):
@@ -267,13 +266,6 @@ def _check_BDB_index(index):
     return True
 
 
-def _request_validation(request):
-    if request.method == 'POST':
-        _schema_validation(request.get_json())
-    else:
-        raise ValueError("Not a POST request")
-
-
 def _components_service_offers(cloud, specs):
     cloud = [("connector/href='%s'" % cloud)]
     service_offers = {'mapper':
@@ -291,7 +283,6 @@ def deploy_run(cloud, product, service_offers, offer, timeout):
     mapper_so = service_offers['mapper']
     reducer_so = service_offers['reducer']
 
-    deploy_id = "Not deployed"
     if mapper_so and reducer_so:
         proc_module = config_get('ss_module_proc_sar')
         comps_clouds = {'mapper': cloud, 'reducer': cloud}
@@ -307,20 +298,21 @@ def deploy_run(cloud, product, service_offers, offer, timeout):
                         'reducer': 1}
         logger.info('Deploying: on "%s" with params "%s" and multiplicity "%s".' %
                     (comps_clouds, comps_params, comps_counts))
-        deploy_id = api.deploy(proc_module,
-                               cloud=comps_clouds,
-                               parameters=comps_params,
-                               multiplicity=comps_counts,
-                               tags='EOproc',
-                               keep_running='never')
-        daemon_watcher = Thread(target=wait_product, args=(deploy_id, cloud,
+        deployment_id = api.deploy(proc_module,
+                                   cloud=comps_clouds,
+                                   parameters=comps_params,
+                                   multiplicity=comps_counts,
+                                   tags='EOproc',
+                                   keep_running='never')
+        daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud,
                                                            offer, timeout))
         daemon_watcher.setDaemon(True)
         daemon_watcher.start()
+        return '%s/run/%s' % (api.endpoint, deployment_id)
     else:
-        logger.warn("No suitable instance types found for mapper and reducer "
-                    "on cloud %s" % cloud)
-    return deploy_id
+        msg = "No suitable instance types found for mapper and reducer on cloud %s" % cloud
+        logger.warn(msg)
+        return msg
 
 
 def get_user_connectors(user):
@@ -398,8 +390,9 @@ def sla_init():
             raise ValueError("The data has not been found in any connector \
                              associated with the Nuvla account")
         logger.info("Data located in: %s" % data_loc)
-        create_BDB(data_loc, specs_vm, product_list, offer)
-        msg = "Cloud %s are currently benchmarked." % (', ').join(data_loc)
+        deployments = run_benchmarks(data_loc, specs_vm, product_list, offer)
+        msg = "Cloud %s are currently being benchmarked with %s" % \
+              (', '.join(data_loc), ', '.join(deployments))
         status = "201"
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
@@ -416,8 +409,8 @@ def sla_cli():
 
     try:
         _check_BDB_index(index)
-        _request_validation(request)
         data = request.get_json()
+        _schema_validation(data)
         sla = data['SLA']
         global s3_credentials
         s3_credentials = data['result']['s3_credentials']
