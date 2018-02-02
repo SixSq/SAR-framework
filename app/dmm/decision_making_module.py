@@ -3,14 +3,12 @@ from __future__ import division
 import math
 
 from elasticsearch import Elasticsearch
-from slipstream.api import Api
 import server_dmm as srv_dmm
 import summarizer as summ
 from log import get_logger
 
 logger = get_logger(name='dmm')
 
-api = Api()
 index = 'sar'
 type = 'eo-proc'
 
@@ -18,6 +16,7 @@ server_host = 'localhost'
 res = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
 
+# FIXME: use time in the query!
 def query_db(cloud, time, offer):
     query = {"query": {
         "range": {
@@ -27,10 +26,10 @@ def query_db(cloud, time, offer):
         }
     }
     }
-    return (res.get(index=index, doc_type=type, id=cloud))
+    return res.get(index=index, doc_type=type, id=cloud)
 
 
-''' decision making moduke
+''' decision making module
 
   : inputs    cloud, offer, time
 
@@ -46,8 +45,8 @@ def _prod_spec(r, spec):
     return (map(int, spec))
 
 
-def dmm(cloud, time, offer, ss_username, ss_password):
-    api.login(ss_username, ss_password)
+def dmm(cloud, time, offer, ssapi=None):
+    # TODO: if performance data is stored as SOs in SC on SS use api to get it.
     ranking = []
     for c in cloud:
         resp = query_db(c, time, offer)
@@ -74,8 +73,8 @@ def dmm(cloud, time, offer, ss_username, ss_password):
     return sorted(ranking, key=lambda x: x[3])
 
 
-if __name__ == '__main__':
-    cloud = ['ec2-eu-west']
-    time = 1000
-    offer = '1'
-    dmm(cloud, time, offer, ss_username, ss_password)
+# if __name__ == '__main__':
+#     cloud = ['ec2-eu-west']
+#     time = 1000
+#     offer = '1'
+#     dmm(cloud, time, offer, ss_username, ss_password)

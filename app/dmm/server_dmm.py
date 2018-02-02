@@ -236,7 +236,7 @@ def run_benchmarks(clouds, specs_vm, product_list, offer):
 def _check_BDB_cloud(index, clouds):
     valid_cloud = []
     for c in _check_str_list(clouds):
-        req = ('/').join([index, doc_type, c])
+        req = '/'.join([index, doc_type, c])
         rep = _get_elastic(req).json()
         if rep['found']:
             valid_cloud.append(c)
@@ -426,7 +426,7 @@ def sla_cli():
         msg = ""
         status = ""
 
-        ranking = dmm.dmm(data_loc, time, offer, ss_username, ss_password)
+        ranking = dmm.dmm(data_loc, time, offer)
 
         if data_loc and ranking:
             msg = "SLA accepted! "
