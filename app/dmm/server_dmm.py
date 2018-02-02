@@ -25,6 +25,12 @@ CONFIG_FILE = 'dmm.conf'
 
 config_parser = None
 
+# {"host": "sos.exo.io",
+#  "bucket": "eodata_output",
+#  "key": "xxx",
+#  "secret": "yyy"}
+result_s3_creds = {}
+
 app = Flask(__name__, static_url_path='')
 api = Api()
 elastic_host = 'http://localhost:9200'
@@ -45,15 +51,14 @@ def send_media(path):
 
 
 def connect_s3():
-    access_key = s3_credentials[2]
-    secret_key = s3_credentials[3]
-    host = s3_credentials[0]
+    access_key = result_s3_creds.get('key')
+    secret_key = result_s3_creds.get('secret')
+    host = result_s3_creds.get('host')
 
     return boto.connect_s3(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         host=host,
-        # is_secure=False,               # uncomment if you are not using ssl
         calling_format=boto.s3.connection.OrdinaryCallingFormat())
 
 
@@ -137,7 +142,7 @@ def wait_product(deployment_id, cloud, offer, time_limit):
         state = deployment_data[2]
         output_id = deployment_data[8].split('/')[-1]
 
-    download_product(s3_credentials[1], output_id)
+    download_product(result_s3_creds.get('bucket'), output_id)
     summarizer.summarize_run(deployment_id, cloud, offer, ss_username, ss_password)
 
     return "Product %s delivered!" % output_id
@@ -223,12 +228,12 @@ def run_benchmarks(clouds, specs_vm, product_list, offer):
         populate_db(index)
 
     deployments = []
-    for c in clouds:
-        populate_db(index, c)
-        service_offers = _components_service_offers(c, specs_vm)
-        deployment_id = deploy_run(c, product_list, service_offers, offer, 9999)
+    for cloud in clouds:
+        populate_db(index, cloud)
+        vm_service_offers = _components_service_offers(cloud, specs_vm)
+        deployment_id = deploy_run(cloud, product_list, vm_service_offers, offer, 9999)
         logger.info("Deployed run: %s on cloud %s with service offers %s" %
-                    (deployment_id, c, str(service_offers)))
+                    (deployment_id, cloud, str(vm_service_offers)))
         deployments.append(deployment_id)
     return deployments
 
@@ -277,11 +282,11 @@ def _components_service_offers(cloud, specs):
     return service_offers
 
 
-def deploy_run(cloud, product, service_offers, offer, timeout):
+def deploy_run(cloud, product, vm_service_offers, offer, timeout):
     server_ip = config_get('dmm_ip')
     server_hostname = config_get('dmm_hostname')
-    mapper_so = service_offers['mapper']
-    reducer_so = service_offers['reducer']
+    mapper_so = vm_service_offers['mapper']
+    reducer_so = vm_service_offers['reducer']
 
     if mapper_so and reducer_so:
         proc_module = config_get('ss_module_proc_sar')
@@ -289,6 +294,10 @@ def deploy_run(cloud, product, service_offers, offer, timeout):
         # FIXME: need to provide user's S3 endpoint, bucket and creds for results.
         comps_params = {'mapper': {'service-offer': mapper_so,
                                    'product-list': ' '.join(product),
+
+                                   # 's3-host': '???',
+                                   # 's3-bucket': '???',
+
                                    'server_hn': server_hostname,
                                    'server_ip': server_ip},
                         'reducer': {'service-offer': reducer_so,
@@ -376,8 +385,8 @@ def sla_init():
     data = request.get_json(force=True)
     product_list = data['product_list']
     specs_vm = _format_specs(data['specs_vm'])
-    global s3_credentials
-    s3_credentials = data['result']['s3_credentials']
+    global result_s3_creds
+    result_s3_creds = data['result']['s3_credentials']
     offer = "CannedOffer_1"
     logger.info("Instance sizes: " + str(specs_vm))
 
@@ -411,10 +420,11 @@ def sla_cli():
         _check_BDB_index(index)
         data = request.get_json()
         _schema_validation(data)
-        sla = data['SLA']
-        global s3_credentials
-        s3_credentials = data['result']['s3_credentials']
 
+        global result_s3_creds
+        result_s3_creds = data['result']['s3_credentials']
+
+        sla = data['SLA']
         logger.info("SLA: %s" % sla)
         product_list = sla['product_list']
         time = sla['requirements'][0]
@@ -426,17 +436,17 @@ def sla_cli():
         msg = ""
         status = ""
 
-        ranking = dmm.dmm(data_loc, time, offer)
+        cloud_ranking = dmm.dmm(data_loc, time, offer)
 
-        if data_loc and ranking:
+        if data_loc and cloud_ranking:
             msg = "SLA accepted! "
             status = "201"
-            winner = ranking[0]
+            cloud_winner = cloud_ranking[0]
 
-            logger.info("ranking: %s" % ranking[0:3])
-            serviceOffers = {'mapper': winner[1],
-                             'reducer': winner[2]}
-            deploy_run(winner[0],
+            logger.info("cloud ranking: %s" % cloud_ranking[0:3])
+            serviceOffers = {'mapper': cloud_winner[1],
+                             'reducer': cloud_winner[2]}
+            deploy_run(cloud_winner[0],
                        product_list,
                        serviceOffers,
                        offer,

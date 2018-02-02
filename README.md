@@ -59,15 +59,15 @@ In order to successfully execute the application, you should have:
            "reducer": [1, 1000, 100]
             },
          "product_list": [
-           "S1A_IW_GRDH_1SDV_20151226T182813_20151226T182838_009217_00D48F_5D5F"
+           "S1A_IW_GRDH_1SDV_20151226T182813_20151226T182838_009217_00D48F_5D5F",
+           "S1A_IW_GRDH_1SDV_20160424T182813_20160424T182838_010967_010769_AA98"
            ],
          "result": {
-             "s3_credentials": [
-                 "sos-ch-dk-2.exo.io",
-                 "buket",
-                 "xxx",
-                 "yyy"
-              ]
+            "s3_credentials": {
+                  "host": "<s3 endpoint>",
+                  "bucket": "<bucket name>",
+                  "key": "xxx",
+                  "secret": "yyy"}}
          }
      }'
       ```
@@ -88,12 +88,10 @@ In order to successfully execute the application, you should have:
                 ]
             },
         "result": {
-                "s3_credentials":[
-                      <host_base>,
-                      <buket_id>,
-                      <access_key>,
-                      <secret_key>
-                      ]
-                    },
+            "s3_credentials": {
+                  "host": "<s3 endpoint>",
+                  "bucket": "<bucket name>",
+                  "key": "xxx",
+                  "secret": "yyy"}}
       }'
     ```

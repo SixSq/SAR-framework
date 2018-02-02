@@ -3,19 +3,19 @@
 set -e
 set -x
 
-ss_username=`ss-get ss-username`
 ss_password=`ss-get ss-password`
 ss-set ss-password undefined
+ss_username=`ss-get ss-username`
 hostip=$(ss-get hostname)
 hostname=$(hostname)
 
-SAR_PATH=~/SAR-framework
+SAR_LOC=~/SAR-framework
 
-git clone https://github.com/SixSq/SAR-framework.git $SAR_PATH
+git clone https://github.com/SixSq/SAR-framework.git $SAR_LOC
 
-pip install -r $SAR_PATH/app/dmm/requirements.txt
+pip install -r $SAR_LOC/app/dmm/requirements.txt
 
-cd $SAR_PATH/app/dmm/
+cd $SAR_LOC/app/dmm/
 sed -i -e 's/<SS_USERNAME>/'$ss_username'/' \
        -e 's/<SS_PASSWORD>/'$ss_password'/' \
        -e 's/<DMM_IP>/'$hostip'/' \
@@ -26,6 +26,6 @@ python server_dmm.py &
 # FIXME: remove when SS client is running in virtualenv.
 pip install slipstream-client
 
-url=http://$hostip
+url=http://$hostip/dmm
 ss-set url.service "${url}"
 ss-set ss:url.service "${url}"
