@@ -230,7 +230,7 @@ def run_benchmarks(clouds, specs_vm, product_list, offer):
     deployments = []
     for cloud in clouds:
         populate_db(index, cloud)
-        vm_service_offers = _components_service_offers(cloud, specs_vm)
+        vm_service_offers = _vm_service_offers(cloud, specs_vm)
         deployment_id = deploy_run(cloud, product_list, vm_service_offers, offer, 9999)
         logger.info("Deployed run: %s on cloud %s with service offers %s" %
                     (deployment_id, cloud, str(vm_service_offers)))
@@ -271,7 +271,7 @@ def _check_BDB_index(index):
     return True
 
 
-def _components_service_offers(cloud, specs):
+def _vm_service_offers(cloud, specs):
     cloud = [("connector/href='%s'" % cloud)]
     service_offers = {'mapper':
                           sc.request_vm(api, specs['mapper'],
@@ -354,7 +354,7 @@ def sla_cost():
             item = item['_source']
             for k, v in item.items():
                 specs = _format_specs(v['components'])
-                ids = _components_service_offers(c, specs)
+                ids = _vm_service_offers(c, specs)
                 item[k]['price'] = dmm.get_price(ids.values(), v['time_records'])
         data_admin[c] = item
 

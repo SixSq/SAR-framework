@@ -60,7 +60,7 @@ def dmm(cloud, time, offer, ssapi=None):
             specs = srv_dmm._format_specs(specs)
             # specs['mapper'] = math.ceil(ratio * float(specs['mapper'][0:3]))
 
-            serviceOffers = srv_dmm._components_service_offers(c, specs)
+            serviceOffers = srv_dmm._vm_service_offers(c, specs)
             mapper_so = serviceOffers['mapper']
             reducer_so = serviceOffers['reducer']
             cost = summ.get_price([mapper_so, reducer_so], past_time)
