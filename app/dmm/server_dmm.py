@@ -109,7 +109,7 @@ def wait_product(duid, cloud, offer, time_limit):
     output_id = ""
     states_final = ['ready', 'done']
 
-    while dpl_data.status not in states_final and not output_id:
+    while (dpl_data.status not in states_final) and (not output_id):
         dpl_data = ss_api.get_deployment(duid)
         t = watch_execution_time(dpl_data.started_at)
         logger.info("Deployment %s. Waiting state '%s' of '%s'. Time elapsed: %s. SLA time left: %s" %
@@ -122,7 +122,11 @@ def wait_product(duid, cloud, offer, time_limit):
             return msg
 
         time.sleep(45)
-        output_id = dpl_data.service_url.split('/')[-1]
+        url = dpl_data.service_url
+        if url and (not url.startswith('ssh://')):
+            output_id = url.split('/')[-1]
+
+    logger.info("Deployment %s. Finished waiting loop in state: %s." % (duid, dpl_data.status))
 
     # FIXME: instead of downloading just check that it's there.
     download_product(result_s3_creds.get('bucket'), output_id)
