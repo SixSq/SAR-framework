@@ -1,4 +1,3 @@
-import sys
 import os
 import time
 import traceback
@@ -32,7 +31,7 @@ config_parser = None
 result_s3_creds = {}
 
 app = Flask(__name__, static_url_path='')
-api = Api()
+ss_api = Api()
 elastic_host = 'http://localhost:9200'
 doc_type = 'eo-proc'
 server_host = 'localhost'
@@ -101,12 +100,12 @@ def download_product(bucket_id, output_id):
 
 
 def cancel_deployment(deployment_id):
-    api.terminate(deployment_id)
-    state = api.get_deployment(deployment_id)[2]
+    ss_api.terminate(deployment_id)
+    state = ss_api.get_deployment(deployment_id)[2]
     while state != 'cancelled':
         logger.info("Terminating deployment %s." % deployment_id)
         time.sleep(5)
-        api.terminate(deployment_id)
+        ss_api.terminate(deployment_id)
 
 
 def watch_execution_time(start_time):
@@ -122,13 +121,13 @@ def wait_product(deployment_id, cloud, offer, time_limit):
     :param   deployment_id: uuid of the deployment
     :type    deployment_id: str
     """
-    deployment_data = api.get_deployment(deployment_id)
+    deployment_data = ss_api.get_deployment(deployment_id)
     state = deployment_data[2]
     output_id = ""
     state_final = 'ready'
 
     while state != state_final and not output_id:
-        deployment_data = api.get_deployment(deployment_id)
+        deployment_data = ss_api.get_deployment(deployment_id)
         logger.info('Deployment data: %s' % deployment_data)
         t = watch_execution_time(deployment_data[3])
         logger.info("Deployment '%s' in state '%s' (waiting for %s). Time elapsed: %s seconds" %
@@ -148,36 +147,45 @@ def wait_product(deployment_id, cloud, offer, time_limit):
     return "Product %s delivered!" % output_id
 
 
-def _all_products_on_cloud(c, rep_so, prod_list):
-    products_cloud = ['xXX' for so in rep_so if so['connector']['href'] == c]
-
+def _all_products_on_cloud(cloud, data_so, prod_list):
+    products_cloud = ['xXX' for so in data_so if so['connector']['href'] == cloud]
     return len(products_cloud) >= len(prod_list)
 
 
-def _check_str_list(data):
+def _to_list(data):
     if isinstance(data, unicode) or isinstance(data, str):
         data = [data]
     return data
 
 
-def find_data_loc(prod_list):
-    """
-    :param   prod_list: Input product list
-    :type    prod_list: list
-
-    :param   cloud_legit: Data localization found on service catalog
-    :type    cloud_legit: dictionnary
-    """
-    prod_list = _check_str_list(prod_list)
-    specs_data = ["resource:type='DATA'", "resource:platform='S3'"]
-    rep_so = sc.request_data(api, specs_data, prod_list)['serviceOffers']
-    cloud_set = list(set([c['connector']['href'] for c in rep_so]))
-    cloud_legit = []
-    for c in cloud_set:
-        if _all_products_on_cloud(c, rep_so, prod_list):
-            cloud_legit.append(c)
-    _check_str_list(cloud_legit)
-    return cloud_legit
+def find_data_loc(api, prod_list):
+    resp = sc.request_data(api, prod_list)
+    data_so = resp['serviceOffers']
+    clouds_s3 = {}
+    # Current deployment algorithm doesn't support clouds
+    # that store data in multiple buckets.
+    clouds_black_listed = []
+    for so in data_so:
+        cloud = so['connector']['href']
+        s3host = so['resource:host']
+        s3bucket = so['resource:bucket']
+        if cloud not in clouds_s3 and cloud not in clouds_black_listed:
+            clouds_s3[cloud] = {'s3host': s3host, 's3bucket': s3bucket}
+        else:
+            if s3host == clouds_s3[cloud]['s3host'] and \
+                    s3bucket == clouds_s3[cloud]['s3bucket']:
+                pass
+            else:
+                del clouds_s3[cloud]
+                clouds_black_listed.append(cloud)
+                logger.info('Blacklisted cloud for storing products in '
+                            'multiple buckets: %s' % cloud)
+    clouds_s3_legit = {}
+    for cloud in clouds_s3:
+        if _all_products_on_cloud(cloud, data_so, prod_list):
+            clouds_s3_legit[cloud] = clouds_s3[cloud]
+    logger.info('Products are on clouds: %s', clouds_s3_legit)
+    return clouds_s3_legit
 
 
 def _schema_validation(reqs):
@@ -221,26 +229,26 @@ def populate_db(index, id=""):
     return rep
 
 
-def run_benchmarks(clouds, specs_vm, product_list, offer):
+def run_benchmarks(clouds_s3, specs_vm, product_list, offer):
     index = 'sar'
     req_index = requests.get(elastic_host + '/' + index)
     if not req_index:
         populate_db(index)
 
     deployments = []
-    for cloud in clouds:
+    for cloud, s3 in clouds_s3.iteritems():
         populate_db(index, cloud)
         vm_service_offers = _vm_service_offers(cloud, specs_vm)
-        deployment_id = deploy_run(cloud, product_list, vm_service_offers, offer, 9999)
-        logger.info("Deployed run: %s on cloud %s with service offers %s" %
-                    (deployment_id, cloud, str(vm_service_offers)))
+        deployment_id = deploy_run(cloud, s3, product_list, vm_service_offers, offer, 9999)
+        logger.info("Deployed run: %s on cloud %s with VM service offers %s and data in %s" %
+                    (deployment_id, cloud, str(vm_service_offers), s3))
         deployments.append(deployment_id)
     return deployments
 
 
 def _check_BDB_cloud(index, clouds):
     valid_cloud = []
-    for c in _check_str_list(clouds):
+    for c in _to_list(clouds):
         req = '/'.join([index, doc_type, c])
         rep = _get_elastic(req).json()
         if rep['found']:
@@ -271,18 +279,32 @@ def _check_BDB_index(index):
     return True
 
 
+def _get_vm_so(specs, clouds, name):
+    resp = sc.request_vm(ss_api, specs, clouds)
+    if 'serviceOffers' not in resp:
+        raise Exception('Failed to find SOs for %s %s on clouds %s.' % (name, specs, clouds))
+    return resp['serviceOffers'][0]['id']
+
+
+def _get_mapper_so(specs, clouds):
+    n = 'mapper'
+    return _get_vm_so(specs[n], clouds, n)
+
+
+def _get_reducer_so(specs, clouds):
+    n = 'reducer'
+    return _get_vm_so(specs[n], clouds, n)
+
+
 def _vm_service_offers(cloud, specs):
-    cloud = [("connector/href='%s'" % cloud)]
-    service_offers = {'mapper':
-                          sc.request_vm(api, specs['mapper'],
-                                        cloud)['serviceOffers'][0]['id'],
-                      'reducer':
-                          sc.request_vm(api, specs['reducer'],
-                                        cloud)['serviceOffers'][0]['id']}
+    clouds = ["connector/href='%s'" % cloud]
+    mapper_so = _get_mapper_so(specs, clouds)
+    reducer_so = _get_reducer_so(specs, clouds)
+    service_offers = {'mapper': mapper_so, 'reducer': reducer_so}
     return service_offers
 
 
-def deploy_run(cloud, product, vm_service_offers, offer, timeout):
+def deploy_run(cloud, s3, product, vm_service_offers, offer, timeout):
     server_ip = config_get('dmm_ip')
     server_hostname = config_get('dmm_hostname')
     mapper_so = vm_service_offers['mapper']
@@ -294,10 +316,8 @@ def deploy_run(cloud, product, vm_service_offers, offer, timeout):
         # FIXME: need to provide user's S3 endpoint, bucket and creds for results.
         comps_params = {'mapper': {'service-offer': mapper_so,
                                    'product-list': ' '.join(product),
-
-                                   # 's3-host': '???',
-                                   # 's3-bucket': '???',
-
+                                   's3-host': s3['s3host'],
+                                   's3-bucket': s3['s3bucket'],
                                    'server_hn': server_hostname,
                                    'server_ip': server_ip},
                         'reducer': {'service-offer': reducer_so,
@@ -307,17 +327,18 @@ def deploy_run(cloud, product, vm_service_offers, offer, timeout):
                         'reducer': 1}
         logger.info('Deploying: on "%s" with params "%s" and multiplicity "%s".' %
                     (comps_clouds, comps_params, comps_counts))
-        deployment_id = api.deploy(proc_module,
-                                   cloud=comps_clouds,
-                                   parameters=comps_params,
-                                   multiplicity=comps_counts,
-                                   tags='EOproc',
-                                   keep_running='never')
-        daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud,
-                                                           offer, timeout))
-        daemon_watcher.setDaemon(True)
-        daemon_watcher.start()
-        return '%s/run/%s' % (api.endpoint, deployment_id)
+        deployment_id = 'DPL_UUID'
+        # deployment_id = ss_api.deploy(proc_module,
+        #                               cloud=comps_clouds,
+        #                               parameters=comps_params,
+        #                               multiplicity=comps_counts,
+        #                               tags='EOproc',
+        #                               keep_running='never')
+        # daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud,
+        #                                                    offer, timeout))
+        # daemon_watcher.setDaemon(True)
+        # daemon_watcher.start()
+        return '%s/run/%s' % (ss_api.endpoint, deployment_id)
     else:
         msg = "No suitable instance types found for mapper and reducer on cloud %s" % cloud
         logger.warn(msg)
@@ -325,7 +346,7 @@ def deploy_run(cloud, product, vm_service_offers, offer, timeout):
 
 
 def get_user_connectors(user):
-    cloud_set = api.get_user(user).configured_clouds
+    cloud_set = ss_api.get_user(user).configured_clouds
     return list(cloud_set)
 
 
@@ -392,16 +413,15 @@ def sla_init():
 
     try:
         _check_BDB_state()
-        data_loc = find_data_loc(product_list)
+        clouds_s3 = find_data_loc(ss_api, product_list)
         user_clouds = str(get_user_connectors(ss_username))
-        data_loc = [c for c in data_loc if c in user_clouds]
-        if not data_loc:
+        if not [c for c in clouds_s3 if c in user_clouds]:
             raise ValueError("The data has not been found in any connector \
-                             associated with the Nuvla account")
-        logger.info("Data located in: %s" % data_loc)
-        deployments = run_benchmarks(data_loc, specs_vm, product_list, offer)
+                             associated with the Nuvla account %s" % ss_username)
+        logger.info("Data located in: %s" % clouds_s3)
+        deployments = run_benchmarks(clouds_s3, specs_vm, product_list, offer)
         msg = "Cloud %s are currently being benchmarked with %s" % \
-              (', '.join(data_loc), ', '.join(deployments))
+              (', '.join(clouds_s3.keys()), ', '.join(deployments))
         status = "201"
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
@@ -429,7 +449,7 @@ def sla_cli():
         product_list = sla['product_list']
         time = sla['requirements'][0]
         offer = sla['requirements'][1]
-        data_loc = find_data_loc(product_list)
+        data_loc = find_data_loc(ss_api, product_list)
         logger.info("Data located in: %s" % data_loc)
         data_loc = _check_BDB_cloud(index, data_loc)
         logger.info("Benchmark run located in: %s" % data_loc)
@@ -481,5 +501,5 @@ def config_get(opt, default=''):
 if __name__ == '__main__':
     ss_username = config_get('ss_username')
     ss_password = config_get('ss_password')
-    api.login_internal(ss_username, ss_password)
+    ss_api.login_internal(ss_username, ss_password)
     app.run(host="127.0.0.1", port=int("8080"))

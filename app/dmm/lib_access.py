@@ -12,58 +12,42 @@ def _url(endpoint):
     return endpoint + '/api/service-offer?$filter='
 
 
-def _request_url(api, resources):
-    return _url(api.endpoint) + resources[0:len(resources) - 4]
-
-
-def _check_str_list(data):
-    if isinstance(data, unicode) or isinstance(data, str):
-        data = [data]
-    return data
+def _request_url(api, cimi_filter):
+    return _url(api.endpoint) + cimi_filter
 
 
 def _join_attributes(attr, operator):
-    attr = _check_str_list(attr)
     return (' ' + operator + ' ').join(attr)
 
 
-def _format_data_resource(data):
-    # data = _check_str_list(data)
-    return (["resource:class='%s.SAFE'" % prod.strip() for prod in data])
+def _to_data_resource(data):
+    return ["resource:class='%s.SAFE'" % prod.strip() for prod in data]
 
 
-def request_data(api, specs, data):
-    """
-    :param   specs: Specs used as filter to narrpw specifically the 'DATA' service-offer
-    :type
+def request_data(api, product_list):
+    specs = ["resource:type='DATA'", "resource:platform='S3'"]
+    base_data_spec = _join_attributes(specs, 'and')
+    product_list = _to_data_resource(product_list)
 
-    :param   specs: uri of the bucket
-    :type
-    """
-    specs_resource = _join_attributes(specs, 'and')
-    data_resource = _format_data_resource(data)
-
-    resources = ""
-    for p in data_resource:
-        temp = _join_attributes([p, specs_resource], 'and')
-        resources = _join_attributes([temp, resources], 'or')
-    request = _request_url(api, resources)
+    cimi_filter = base_data_spec
+    if product_list:
+        cimi_filter = cimi_filter + ' and (' + ' or '.join(product_list) + ')'
+    request = _request_url(api, cimi_filter)
     logger.info('request_data: %s' % request)
     return api.session.get(request).json()
 
 
 def request_vm(api, specs, clouds, orderby=True):
-    specs_resource = _join_attributes(specs, 'and')
-    resources = ""
-    # clouds      = _check_str_list(clouds)
-    for c in clouds:
-        temp = _join_attributes([c, specs_resource], 'and')
-        resources = _join_attributes([temp, resources], 'or')
-    request = _request_url(api, resources)
+    base_specs = _join_attributes(specs, 'and')
+    cimi_filter = base_specs
+    if clouds:
+        cimi_filter = cimi_filter + ' and (' + ' or '.join(clouds) + ')'
+    request = _request_url(api, cimi_filter)
     if orderby:
         request += '&$orderby=price:unitCost'
     logger.info('request_vm: %s' % request)
-    return api.session.get(request).json()
+    resp = api.session.get(request).json()
+    return resp
 
 
 if __name__ == '__main__':
