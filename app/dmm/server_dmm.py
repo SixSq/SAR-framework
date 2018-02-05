@@ -80,23 +80,13 @@ def _format_specs(specs):
 
 
 def download_product(bucket_id, output_id):
-    """
-    :param   bucket_id: uri of the bucket
-    :type    bucket_id: str
-
-    :param   conn: interface to s3 bucket
-    :type    conn: boto connect_s3 object
-
-    param    output_id: product id
-    type     output_id: str
-    """
+    logger.info("Downloading product %s." % output_id)
     conn = connect_s3()
     bucket = conn.get_bucket(bucket_id)
     key = bucket.get_key(output_id)
     output_path = os.getcwd() + output_id
     key.get_contents_to_filename(output_path)
-
-    logger.info("Product stored @ %s." % output_id)
+    logger.info("Downloaded product %s." % output_id)
 
 
 def cancel_deployment(deployment_id):
@@ -138,7 +128,9 @@ def wait_product(duid, cloud, offer, time_limit):
     download_product(result_s3_creds.get('bucket'), output_id)
     summarizer.summarize_run(duid, cloud, offer)
 
-    return "Deployment %s. Product %s delivered!" % (duid, output_id)
+    msg = "Deployment %s. Product %s delivered!" % (duid, output_id)
+    logger.info(msg)
+    return msg
 
 
 def _all_products_on_cloud(cloud, data_so, prod_list):

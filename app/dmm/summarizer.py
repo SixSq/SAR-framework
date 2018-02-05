@@ -214,6 +214,7 @@ def _create_run_doc(cloud, offer, time_records, products, serviceOffers):
 
 
 def summarize_run(duid, cloud, offer):
+    logger.info("Running summarizer: %s, %s, %s" % (duid, cloud, offer))
     response = _query_run(duid, cloud)
     [mappers, reducer] = _div_node(response['hits'])
     logger.info('summarize_run mappers: %s' % mappers)
@@ -224,9 +225,10 @@ def summarize_run(duid, cloud, offer):
 
     time_records = _compute_time_records(mappers_data, reducer_data, duid)
     products = map(lambda x: _get_product_info(x), mappers_data.values())
-    serviceOffers = _get_service_offer(mappers, reducer)
+    service_offers = _get_service_offer(mappers, reducer)
 
-    _create_run_doc(cloud, offer, time_records, products, serviceOffers)
+    _create_run_doc(cloud, offer, time_records, products, service_offers)
+    logger.info("Done summarizer: %s, %s, %s" % (duid, cloud, offer))
 
 
 if __name__ == '__main__':
