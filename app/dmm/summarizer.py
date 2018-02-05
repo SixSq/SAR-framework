@@ -12,7 +12,7 @@ logger = get_logger(name='summarizer')
 
 api = Api()
 server_host = 'localhost'
-res = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
 
 def _extract_time(m):
@@ -64,7 +64,7 @@ def _intra_node_time(data, duiid):
                              deployment_time.seconds)})
 
 
-def compute_time_records(mappers, reducer, duiid):
+def _compute_time_records(mappers, reducer, duiid):
     mappers_time = map(lambda x: _intra_node_time(x, duiid),
                        mappers.values())
     for i, v in enumerate(mappers.values()):
@@ -101,7 +101,7 @@ def _get_service_offer(mapper, reducer):
     return [so_m, so_r]
 
 
-def get_product_info(data):
+def _get_product_info(data):
     raw_info = _find_msg(data, "finish downloading")
     info = raw_info.split(' - ')
 
@@ -155,14 +155,14 @@ def _filter_field(hits, field, value):
     return result
 
 
-def div_node(run):
+def _div_node(run):
     mapper = _filter_field(run, "nodename", "mapper")
     reducer = _filter_field(run, "nodename", "reducer")
 
     return (mapper, reducer)
 
 
-def extract_node_data(mapper, reducer, duiid):
+def _extract_node_data(mapper, reducer, duiid):
     l = []
     for m in mapper:
         l.append((m['_source']['host'], m['_source']['message']))
@@ -176,22 +176,22 @@ def extract_node_data(mapper, reducer, duiid):
     return (mappers, reducer)
 
 
-def query_run(duiid, cloud):
+def _query_run(duid, cloud):
     query = {
         "query": {
             "bool": {
                 "must": [
                     {"match": {"fields.cloud": cloud}},
-                    {"match": {"fields.duiid": duiid}}
+                    {"match": {"fields.duid": duid}}
                 ]
             }
         }
     }
 
-    return res.search(index='_all', body=query, size=300)
+    return es.search(index='_all', body=query, size=300)
 
 
-def create_run_doc(cloud, offer, time_records, products, serviceOffers):
+def _create_run_doc(cloud, offer, time_records, products, serviceOffers):
     run = {
         offer: {
             'components': {'mapper': _get_specs(serviceOffers[0]),
@@ -207,26 +207,28 @@ def create_run_doc(cloud, offer, time_records, products, serviceOffers):
         }
     }
 
-    rep = res.update(index='sar',
-                     doc_type='eo-proc',
-                     id=cloud,
-                     body={"doc": run})
+    rep = es.update(index='sar',
+                    doc_type='eo-proc',
+                    id=cloud,
+                    body={"doc": run})
 
 
-def summarize_run(duiid, cloud, offer, ss_username, ss_password):
-    api.login(ss_username, ss_password)
-    response = query_run(duiid, cloud)
-    [mappers, reducer] = div_node(response['hits'])
-    [mappersData, reducerData] = extract_node_data(mappers, reducer, duiid)
+def summarize_run(duid, cloud, offer):
+    response = _query_run(duid, cloud)
+    [mappers, reducer] = _div_node(response['hits'])
+    logger.info('summarize_run mappers: %s' % mappers)
+    logger.info('summarize_run reducer: %s' % reducer)
+    [mappers_data, reducer_data] = _extract_node_data(mappers, reducer, duid)
+    logger.info('summarize_run mappers_data: %s' % mappers_data)
+    logger.info('summarize_run reducer_data: %s' % reducer_data)
 
-    time_records = compute_time_records(mappersData, reducerData, duiid)
-    products = map(lambda x: get_product_info(x), mappersData.values())
+    time_records = _compute_time_records(mappers_data, reducer_data, duid)
+    products = map(lambda x: _get_product_info(x), mappers_data.values())
     serviceOffers = _get_service_offer(mappers, reducer)
 
-    rep = create_run_doc(cloud, offer, time_records, products, serviceOffers)
-    return rep
+    _create_run_doc(cloud, offer, time_records, products, serviceOffers)
 
 
 if __name__ == '__main__':
-    [duiid, cloud, offer, ss_username, ss_password] = sys.argv[1:6]
-    summarize_run(duiid, cloud, offer, ss_username, ss_password)
+    duid, cloud, offer = sys.argv[1:4]
+    summarize_run(duid, cloud, offer)

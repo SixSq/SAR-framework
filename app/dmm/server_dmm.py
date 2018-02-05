@@ -110,41 +110,35 @@ def cancel_deployment(deployment_id):
 
 def watch_execution_time(start_time):
     time_format = '%Y-%m-%d %H:%M:%S.%f UTC'
-    delta = datetime.utcnow() - datetime.strptime(start_time,
-                                                  time_format)
-    execution_time = delta.seconds
-    return (execution_time)
+    delta = datetime.utcnow() - datetime.strptime(start_time, time_format)
+    return delta.seconds
 
 
-def wait_product(deployment_id, cloud, offer, time_limit):
-    """
-    :param   deployment_id: uuid of the deployment
-    :type    deployment_id: str
-    """
-    deployment_data = ss_api.get_deployment(deployment_id)
-    state = deployment_data[2]
+def wait_product(duid, cloud, offer, time_limit):
+    dpl_data = ss_api.get_deployment(duid)
     output_id = ""
     state_final = 'ready'
 
-    while state != state_final and not output_id:
-        deployment_data = ss_api.get_deployment(deployment_id)
-        logger.info('Deployment data: %s' % deployment_data)
-        t = watch_execution_time(deployment_data[3])
-        logger.info("Deployment '%s' in state '%s' (waiting for %s). Time elapsed: %s seconds" %
-                    (deployment_id, state, state_final, t))
-        logger.info("SLA time bound left: %d" % (int(time_limit) - int(t)))
-        if (t >= time_limit) or (state == ("cancelled" or "aborted")):
-            cancel_deployment(deployment_id)
-            return ("SLA time bound exceeded. Deployment is cancelled.")
+    while dpl_data.status != state_final and not output_id:
+        dpl_data = ss_api.get_deployment(duid)
+        t = watch_execution_time(dpl_data.started_at)
+        logger.info("Deployment %s. Waiting state '%s' of '%s'. Time elapsed: %s. SLA time left: %s" %
+                    (duid, state_final, str(dpl_data), t, int(time_limit) - int(t)))
+        if (t >= time_limit) or dpl_data.status in ["cancelled", "aborted"]:
+            cancel_deployment(duid)
+            msg = "Deployment %s. SLA time bound %s sec exceeded. Deployment is cancelled." % \
+                  (duid, time_limit)
+            logger.warn(msg)
+            return msg
 
         time.sleep(45)
-        state = deployment_data[2]
-        output_id = deployment_data[8].split('/')[-1]
+        output_id = dpl_data.service_url.split('/')[-1]
 
+    # FIXME: instead of downloading just check that it's there.
     download_product(result_s3_creds.get('bucket'), output_id)
-    summarizer.summarize_run(deployment_id, cloud, offer, ss_username, ss_password)
+    summarizer.summarize_run(duid, cloud, offer)
 
-    return "Product %s delivered!" % output_id
+    return "Deployment %s. Product %s delivered!" % (duid, output_id)
 
 
 def _all_products_on_cloud(cloud, data_so, prod_list):
@@ -311,20 +305,22 @@ def deploy_run(cloud, s3, product, vm_service_offers, offer, timeout):
     reducer_so = vm_service_offers['reducer']
 
     if mapper_so and reducer_so:
-        proc_module = config_get('ss_module_proc_sar')
-        comps_clouds = {'mapper': cloud, 'reducer': cloud}
+        mapper_params = {'service-offer': mapper_so,
+                         'product-list': ' '.join(product),
+                         's3-host': s3['s3host'],
+                         's3-bucket': s3['s3bucket'],
+                         'server_hn': server_hostname,
+                         'server_ip': server_ip}
         # FIXME: need to provide user's S3 endpoint, bucket and creds for results.
-        comps_params = {'mapper': {'service-offer': mapper_so,
-                                   'product-list': ' '.join(product),
-                                   's3-host': s3['s3host'],
-                                   's3-bucket': s3['s3bucket'],
-                                   'server_hn': server_hostname,
-                                   'server_ip': server_ip},
-                        'reducer': {'service-offer': reducer_so,
-                                    'server_hn': server_hostname,
-                                    'server_ip': server_ip}}
+        reducer_params = {'service-offer': reducer_so,
+                          'server_hn': server_hostname,
+                          'server_ip': server_ip}
+        comps_params = {'mapper': mapper_params,
+                        'reducer': reducer_params}
         comps_counts = {'mapper': len(product),
                         'reducer': 1}
+        proc_module = config_get('ss_module_proc_sar')
+        comps_clouds = {'mapper': cloud, 'reducer': cloud}
         logger.info('Deploying: on "%s" with params "%s" and multiplicity "%s".' %
                     (comps_clouds, comps_params, comps_counts))
         deployment_id = ss_api.deploy(proc_module,
@@ -333,8 +329,7 @@ def deploy_run(cloud, s3, product, vm_service_offers, offer, timeout):
                                       multiplicity=comps_counts,
                                       tags='EOproc',
                                       keep_running='never')
-        daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud,
-                                                           offer, timeout))
+        daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud, offer, timeout))
         daemon_watcher.setDaemon(True)
         daemon_watcher.start()
         return '%s/run/%s' % (ss_api.endpoint, deployment_id)
@@ -370,7 +365,7 @@ def sla_cost():
             logger.warn(error)
             return Response(error_msg, status=500)
         if item['found']:
-            logger.info('SLA cost found item: %' % item)
+            logger.info('SLA cost found item: %s' % item)
             item = item['_source']
             for k, v in item.items():
                 specs = _format_specs(v['components'])

@@ -38,6 +38,7 @@ def request_data(api, product_list):
 
 
 def request_vm(api, specs, clouds, orderby=True):
+    specs.append("resource:operatingSystem='linux'")
     base_specs = _join_attributes(specs, 'and')
     cimi_filter = base_specs
     if clouds:
