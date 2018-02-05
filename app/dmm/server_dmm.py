@@ -327,17 +327,16 @@ def deploy_run(cloud, s3, product, vm_service_offers, offer, timeout):
                         'reducer': 1}
         logger.info('Deploying: on "%s" with params "%s" and multiplicity "%s".' %
                     (comps_clouds, comps_params, comps_counts))
-        deployment_id = 'DPL_UUID'
-        # deployment_id = ss_api.deploy(proc_module,
-        #                               cloud=comps_clouds,
-        #                               parameters=comps_params,
-        #                               multiplicity=comps_counts,
-        #                               tags='EOproc',
-        #                               keep_running='never')
-        # daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud,
-        #                                                    offer, timeout))
-        # daemon_watcher.setDaemon(True)
-        # daemon_watcher.start()
+        deployment_id = ss_api.deploy(proc_module,
+                                      cloud=comps_clouds,
+                                      parameters=comps_params,
+                                      multiplicity=comps_counts,
+                                      tags='EOproc',
+                                      keep_running='never')
+        daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud,
+                                                           offer, timeout))
+        daemon_watcher.setDaemon(True)
+        daemon_watcher.start()
         return '%s/run/%s' % (ss_api.endpoint, deployment_id)
     else:
         msg = "No suitable instance types found for mapper and reducer on cloud %s" % cloud
