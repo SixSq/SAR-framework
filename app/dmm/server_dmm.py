@@ -117,13 +117,13 @@ def watch_execution_time(start_time):
 def wait_product(duid, cloud, offer, time_limit):
     dpl_data = ss_api.get_deployment(duid)
     output_id = ""
-    state_final = 'ready'
+    states_final = ['ready', 'done']
 
-    while dpl_data.status != state_final and not output_id:
+    while dpl_data.status not in states_final and not output_id:
         dpl_data = ss_api.get_deployment(duid)
         t = watch_execution_time(dpl_data.started_at)
         logger.info("Deployment %s. Waiting state '%s' of '%s'. Time elapsed: %s. SLA time left: %s" %
-                    (duid, state_final, str(dpl_data), t, int(time_limit) - int(t)))
+                    (duid, states_final, str(dpl_data), t, int(time_limit) - int(t)))
         if (t >= time_limit) or dpl_data.status in ["cancelled", "aborted"]:
             cancel_deployment(duid)
             msg = "Deployment %s. SLA time bound %s sec exceeded. Deployment is cancelled." % \
