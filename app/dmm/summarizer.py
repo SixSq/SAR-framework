@@ -16,7 +16,7 @@ es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
 
 def _extract_time(m):
-    return (datetime.strptime(m, "%Y-%m-%d %H:%M:%S"))
+    return datetime.strptime(m, "%Y-%m-%d %H:%M:%S")
 
 
 def timestamp():
@@ -29,24 +29,22 @@ def _time_at(msgs, str):
         time = msg.split(' - ')[1].strip()
     else:
         time = ''.join(msg.split(': ')[1].replace('T', ' '))[0:19]
-    return (_extract_time(time))
+    return _extract_time(time)
 
 
-def _total_time(reducer, duiid):
-    start = _start_time(duiid)
+def _total_time(reducer, duid):
+    start = _start_time(duid)
     total_time = _time_at(reducer, "finish deployment") - start
-
     return total_time.seconds
 
 
-def _start_time(duiid):
-    temp = api.get_deployment(duiid)[3][0:19]
-
+def _start_time(duid):
+    temp = api.get_deployment(duid).started_at[0:19]
     return _extract_time(temp)
 
 
-def _intra_node_time(data, duiid):
-    start = _start_time(duiid)
+def _intra_node_time(data, duid):
+    start = _start_time(duid)
     provisioning_time = _time_at(data, "currently in Provisioning") - start
     install_time = _time_at(data, "start deployment") - start
 
@@ -56,31 +54,29 @@ def _intra_node_time(data, duiid):
     processing_time = _time_at(data, 'finish processing') - \
                       _time_at(data, 'start processing')
 
-    return ({'provisioning': provisioning_time.seconds,
-             'install': install_time.seconds,
-             'deployment': deployment_time.seconds,
-             'processing': processing_time.seconds,
-             'intra-total': (install_time.seconds +
-                             deployment_time.seconds)})
+    return {'provisioning': provisioning_time.seconds,
+            'install': install_time.seconds,
+            'deployment': deployment_time.seconds,
+            'processing': processing_time.seconds,
+            'intra-total': install_time.seconds + deployment_time.seconds}
 
 
-def _compute_time_records(mappers, reducer, duiid):
-    mappers_time = map(lambda x: _intra_node_time(x, duiid),
-                       mappers.values())
+def _compute_time_records(mappers, reducer, duid):
+    mappers_time = map(lambda x: _intra_node_time(x, duid), mappers.values())
     for i, v in enumerate(mappers.values()):
         mappers_time[i]['download'] = _download_time(v)
 
-    reducer_time = _intra_node_time(reducer, duiid)
+    reducer_time = _intra_node_time(reducer, duid)
     reducer_time['upload'] = _upload_time(reducer)
 
-    return ({'mappers': mappers_time,
-             'reducer': reducer_time,
-             'total': _total_time(reducer, duiid)})
+    return {'mappers': mappers_time,
+            'reducer': reducer_time,
+            'total': _total_time(reducer, duid)}
 
 
 def _upload_time(data):
-    upload_time = _time_at(data, 'finish upload') - \
-                  _time_at(data, 'start upload')
+    upload_time = _time_at(data, 'finish uploading') - \
+                  _time_at(data, 'start uploading')
     return upload_time
 
 
@@ -91,7 +87,7 @@ def _download_time(data):
 
 
 def _find_msg(msgs, str):
-    return (filter(lambda x: str in x, msgs)[0])
+    return filter(lambda x: str in x, msgs)[0]
 
 
 def _get_service_offer(mapper, reducer):
@@ -105,11 +101,11 @@ def _get_product_info(data):
     raw_info = _find_msg(data, "finish downloading")
     info = raw_info.split(' - ')
 
-    return (map(lambda x: x.strip(), info[3:5]))
+    return map(lambda x: x.strip(), info[3:5])
 
 
-def get_instance_type(id):
-    _service_offer(0)['price:unitCost']
+# def get_instance_type(id):
+#     _service_offer(0)['price:unitCost']
 
 
 def _service_offer(id):
@@ -147,8 +143,7 @@ def _extract_field(data, field):
 
 def _filter_field(hits, field, value):
     if hits['total'] > 0:
-        hitsObj = hits['hits']
-        result = [h for h in hitsObj \
+        result = [h for h in hits['hits']
                   if h['_source']['fields'][field] == value]
     else:
         result = {}
@@ -159,12 +154,12 @@ def _div_node(run):
     mapper = _filter_field(run, "nodename", "mapper")
     reducer = _filter_field(run, "nodename", "reducer")
 
-    return (mapper, reducer)
+    return mapper, reducer
 
 
-def _extract_node_data(mapper, reducer, duiid):
+def _extract_node_data(mappers, reducer, duiid):
     l = []
-    for m in mapper:
+    for m in mappers:
         l.append((m['_source']['host'], m['_source']['message']))
 
     mappers = defaultdict(list)
@@ -173,7 +168,7 @@ def _extract_node_data(mapper, reducer, duiid):
 
     reducer = [r['_source']['message'] for r in reducer]
 
-    return (mappers, reducer)
+    return mappers, reducer
 
 
 def _query_run(duid, cloud):
@@ -191,13 +186,13 @@ def _query_run(duid, cloud):
     return es.search(index='_all', body=query, size=300)
 
 
-def _create_run_doc(cloud, offer, time_records, products, serviceOffers):
+def _create_run_doc(cloud, offer, time_records, products, service_offers):
     run = {
         offer: {
-            'components': {'mapper': _get_specs(serviceOffers[0]),
-                           'reducer': _get_specs(serviceOffers[1])},
+            'components': {'mapper': _get_specs(service_offers[0]),
+                           'reducer': _get_specs(service_offers[1])},
             'products': products,
-            'price': '%.5f' % (get_price(serviceOffers, time_records)),
+            'price': '%.5f' % (get_price(service_offers, time_records)),
             'timestamp': timestamp(),
             'execution_time': time_records['total'],
             'time_records': {
@@ -216,10 +211,10 @@ def _create_run_doc(cloud, offer, time_records, products, serviceOffers):
 def summarize_run(duid, cloud, offer):
     logger.info("Running summarizer: %s, %s, %s" % (duid, cloud, offer))
     response = _query_run(duid, cloud)
-    [mappers, reducer] = _div_node(response['hits'])
+    mappers, reducer = _div_node(response['hits'])
     logger.info('summarize_run mappers: %s' % mappers)
     logger.info('summarize_run reducer: %s' % reducer)
-    [mappers_data, reducer_data] = _extract_node_data(mappers, reducer, duid)
+    mappers_data, reducer_data = _extract_node_data(mappers, reducer, duid)
     logger.info('summarize_run mappers_data: %s' % mappers_data)
     logger.info('summarize_run reducer_data: %s' % reducer_data)
 
