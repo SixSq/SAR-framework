@@ -95,7 +95,7 @@ def download_product(bucket_id, output_id):
 def cancel_deployment(deployment_id):
     ss_api.terminate(deployment_id)
     state = ss_api.get_deployment(deployment_id)[2]
-    while state != 'cancelled':
+    while state not in ['cancelled', 'aborted', 'done']:
         logger.info("Terminating deployment %s." % deployment_id)
         time.sleep(5)
         ss_api.terminate(deployment_id)
@@ -110,7 +110,7 @@ def watch_execution_time(start_time):
 def wait_product(duid, cloud, offer, time_limit):
     dpl_data = ss_api.get_deployment(duid)
     output_id = ""
-    states_final = ['ready', 'done']
+    states_final = ['ready', 'done', 'aborted']
 
     while (dpl_data.status not in states_final) and (not output_id):
         dpl_data = ss_api.get_deployment(duid)
