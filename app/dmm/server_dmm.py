@@ -294,7 +294,7 @@ def _vm_service_offers(cloud, specs):
     return service_offers
 
 
-def deploy_run(cloud, s3, product, vm_service_offers, offer, timeout):
+def deploy_run(cloud, data_s3, product, vm_service_offers, offer, timeout):
     server_ip = config_get('dmm_ip')
     server_hostname = config_get('dmm_hostname')
     mapper_so = vm_service_offers['mapper']
@@ -303,14 +303,18 @@ def deploy_run(cloud, s3, product, vm_service_offers, offer, timeout):
     if mapper_so and reducer_so:
         mapper_params = {'service-offer': mapper_so,
                          'product-list': ' '.join(product),
-                         's3-host': s3['s3host'],
-                         's3-bucket': s3['s3bucket'],
+                         's3-host': data_s3['s3host'],
+                         's3-bucket': data_s3['s3bucket'],
                          'server_hn': server_hostname,
                          'server_ip': server_ip}
-        # FIXME: need to provide user's S3 endpoint, bucket and creds for results.
         reducer_params = {'service-offer': reducer_so,
                           'server_hn': server_hostname,
                           'server_ip': server_ip}
+        if result_s3_creds:
+            reducer_params['ss-host'] = result_s3_creds.get('host', '')
+            reducer_params['ss-bucket'] = result_s3_creds.get('bucket', '')
+            reducer_params['s3-access-key'] = result_s3_creds.get('key', '')
+            reducer_params['s3-secret-key'] = result_s3_creds.get('secret', '')
         comps_params = {'mapper': mapper_params,
                         'reducer': reducer_params}
         comps_counts = {'mapper': len(product),
