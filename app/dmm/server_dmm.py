@@ -90,7 +90,7 @@ def download_product(bucket_id, output_id):
     output_path = os.getcwd() + output_id
     key.get_contents_to_filename(output_path)
     logger.info("Downloaded product %s." % output_id)
-    
+
 
 def cancel_deployment(deployment_id):
     ss_api.terminate(deployment_id)
@@ -312,8 +312,8 @@ def deploy_run(cloud, data_s3, product, vm_service_offers, offer, timeout):
                           'server_hn': server_hostname,
                           'server_ip': server_ip}
         if result_s3_creds:
-            reducer_params['ss-host'] = result_s3_creds.get('host', '')
-            reducer_params['ss-bucket'] = result_s3_creds.get('bucket', '')
+            reducer_params['s3-host'] = result_s3_creds.get('host', '')
+            reducer_params['s3-bucket'] = result_s3_creds.get('bucket', '')
             reducer_params['s3-access-key'] = result_s3_creds.get('key', '')
             reducer_params['s3-secret-key'] = result_s3_creds.get('secret', '')
         comps_params = {'mapper': mapper_params,
