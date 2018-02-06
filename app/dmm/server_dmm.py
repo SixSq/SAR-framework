@@ -80,6 +80,9 @@ def _format_specs(specs):
 
 
 def download_product(bucket_id, output_id):
+    if not (bucket_id or output_id):
+        logger.info("No bucket and/or product to download was provided.")
+        return
     logger.info("Downloading product %s." % output_id)
     conn = connect_s3()
     bucket = conn.get_bucket(bucket_id)
@@ -87,7 +90,7 @@ def download_product(bucket_id, output_id):
     output_path = os.getcwd() + output_id
     key.get_contents_to_filename(output_path)
     logger.info("Downloaded product %s." % output_id)
-
+    
 
 def cancel_deployment(deployment_id):
     ss_api.terminate(deployment_id)
@@ -128,8 +131,6 @@ def wait_product(duid, cloud, offer, time_limit):
 
     logger.info("Deployment %s. Finished waiting loop in state: %s." % (duid, dpl_data.status))
 
-    # FIXME: instead of downloading just check that it's there.
-    download_product(result_s3_creds.get('bucket'), output_id)
     summarizer.summarize_run(duid, cloud, offer)
 
     msg = "Deployment %s. Product %s delivered!" % (duid, output_id)
