@@ -87,14 +87,22 @@ def _intra_node_time(data, dpl_state_times):
             'intra-total': install_time.seconds + deployment_time.seconds}
 
 
-def _compute_time_records(mappers, reducer, duid):
+def _compute_time_records(mappers_logs, reducer_logs, duid):
+    """
+    :param mappers_logs: list of lists with logs from each mapper
+    :type mappers_logs: [[],]
+    :param reducer_logs: list of logs from reducer
+    :type reducer_logs: []
+    :param duid: deployment id
+    :return:
+    """
     dpl_state_times = _get_dpl_state_times(duid)
-    mappers_time = map(lambda x: _intra_node_time(x, dpl_state_times), mappers.values())
-    for i, v in enumerate(mappers.values()):
+    mappers_time = map(lambda x: _intra_node_time(x, dpl_state_times), mappers_logs)
+    for i, v in enumerate(mappers_logs):
         mappers_time[i]['download'] = _download_time(v)
 
-    reducer_time = _intra_node_time(reducer, dpl_state_times)
-    reducer_time['upload'] = _upload_time(reducer)
+    reducer_time = _intra_node_time(reducer_logs, dpl_state_times)
+    reducer_time['upload'] = _upload_time(reducer_logs)
 
     return {'mappers': mappers_time,
             'reducer': reducer_time,
@@ -120,11 +128,14 @@ def _get_service_offer(mapper, reducer):
     return [so_m, so_r]
 
 
-def _get_product_info(data):
-    raw_info = _find_msg(data, "finish downloading")
-    info = raw_info.split(' - ')
-
-    return map(lambda x: x.strip(), info[3:5])
+def _get_products_list(data):
+    msg = _find_msg(data, "finish downloading")
+    msg_parts= msg.split(' -- ')
+    if len(msg_parts) >= 2:
+        prods = msg_parts[-1].split(' ')
+        return map(lambda x: x.strip(), prods)
+    else:
+        return []
 
 
 # def get_instance_type(id):
@@ -237,12 +248,12 @@ def summarize_run(duid, cloud, offer):
     mappers, reducer = _div_node(response['hits'])
     logger.info('summarize_run mappers: %s' % mappers)
     logger.info('summarize_run reducer: %s' % reducer)
-    mappers_data, reducer_data = _extract_node_data(mappers, reducer, duid)
-    logger.info('summarize_run mappers_data: %s' % mappers_data)
+    mappers_data_dict, reducer_data = _extract_node_data(mappers, reducer, duid)
+    logger.info('summarize_run mappers_data: %s' % mappers_data_dict)
     logger.info('summarize_run reducer_data: %s' % reducer_data)
 
-    time_records = _compute_time_records(mappers_data, reducer_data, duid)
-    products = map(lambda x: _get_product_info(x), mappers_data.values())
+    time_records = _compute_time_records(mappers_data_dict.values(), reducer_data, duid)
+    products = filter(lambda x: _get_products_list(x), mappers_data_dict.values())
     service_offers = _get_service_offer(mappers, reducer)
 
     _create_run_doc(cloud, offer, time_records, products, service_offers)
