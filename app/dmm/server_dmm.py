@@ -6,7 +6,7 @@ from ConfigParser import SafeConfigParser
 
 from flask import Flask, request, Response, send_from_directory
 from elasticsearch import Elasticsearch
-from slipstream.api import Api
+from slipstream_api import Api
 import boto
 import boto.s3.connection
 import requests

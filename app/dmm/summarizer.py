@@ -5,7 +5,7 @@ from datetime import datetime
 from collections import defaultdict
 
 from elasticsearch import Elasticsearch
-from slipstream.api import Api
+from slipstream_api import Api
 from log import get_logger
 
 logger = get_logger(name='summarizer')
@@ -14,45 +14,71 @@ api = Api()
 server_host = 'localhost'
 es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
-
-def _extract_time(m):
-    return datetime.strptime(m, "%Y-%m-%d %H:%M:%S")
+datetime_format = "%Y-%m-%dT%H:%M:%S"
 
 
 def timestamp():
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.utcnow().strftime(datetime_format)
 
 
-def _time_at(msgs, str):
-    msg = _find_msg(msgs, str)
-    if len(msg.split(' - ')) > 1:
-        time = msg.split(' - ')[1].strip()
+def _find_msg(msgs, mstr):
+    """
+    :param msgs: example: @MAPPER_RUN 2018-02-06T16:03:52 start deployment
+    :param mstr: string to match
+    :return: matched string
+    """
+    for m in msgs:
+        if mstr in m:
+            return m
+    return ''
+
+
+def _time_at(msgs, mstr):
+    """
+    :param msgs: example: @MAPPER_RUN 2018-02-06T16:03:52 start deployment
+    :param mstr: string to match
+    :return: datetime.datetime object
+    """
+    msg = _find_msg(msgs, mstr)
+    if msg:
+        time_str = msg.split(' ', 2)[1]
+        return datetime.strptime(time_str, datetime_format)
     else:
-        time = ''.join(msg.split(': ')[1].replace('T', ' '))[0:19]
-    return _extract_time(time)
+        raise Exception('Failed to find %s in the list of messages to determine time.' % mstr)
 
 
-def _total_time(reducer, duid):
-    start = _start_time(duid)
-    total_time = _time_at(reducer, "finish deployment") - start
+def _total_time(dpl_state_times):
+    total_time = dpl_state_times['Ready'] - _start_time(dpl_state_times)
     return total_time.seconds
 
 
-def _start_time(duid):
-    temp = api.get_deployment(duid).started_at[0:19]
-    return _extract_time(temp)
+def _start_time(dpl_state_times):
+    return dpl_state_times['Created']
 
 
-def _intra_node_time(data, duid):
-    start = _start_time(duid)
-    provisioning_time = _time_at(data, "currently in Provisioning") - start
-    install_time = _time_at(data, "start deployment") - start
+def _provisioning_time(dpl_state_times):
+    return dpl_state_times['Executing'] - _start_time(dpl_state_times)
 
-    deployment_time = _time_at(data, 'finish deployment') - \
-                      _time_at(data, 'start deployment')
+
+def _get_dpl_state_times(duid):
+    events = api.get_deployment_events(duid)
+    states_times = {}
+    for e in events:
+        states_times[e.content.get('state')] = \
+            datetime.strptime(e.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+    return states_times
+
+def _intra_node_time(data, dpl_state_times):
+    provisioning_time = _provisioning_time(dpl_state_times)
+
+    install_time = _time_at(data, "start deployment") - \
+                   dpl_state_times['Executing']
 
     processing_time = _time_at(data, 'finish processing') - \
                       _time_at(data, 'start processing')
+
+    deployment_time = _time_at(data, 'finish deployment') - \
+                      _time_at(data, 'start deployment')
 
     return {'provisioning': provisioning_time.seconds,
             'install': install_time.seconds,
@@ -62,32 +88,29 @@ def _intra_node_time(data, duid):
 
 
 def _compute_time_records(mappers, reducer, duid):
-    mappers_time = map(lambda x: _intra_node_time(x, duid), mappers.values())
+    dpl_state_times = _get_dpl_state_times(duid)
+    mappers_time = map(lambda x: _intra_node_time(x, dpl_state_times), mappers.values())
     for i, v in enumerate(mappers.values()):
         mappers_time[i]['download'] = _download_time(v)
 
-    reducer_time = _intra_node_time(reducer, duid)
+    reducer_time = _intra_node_time(reducer, dpl_state_times)
     reducer_time['upload'] = _upload_time(reducer)
 
     return {'mappers': mappers_time,
             'reducer': reducer_time,
-            'total': _total_time(reducer, duid)}
+            'total': _total_time(dpl_state_times)}
 
 
 def _upload_time(data):
     upload_time = _time_at(data, 'finish uploading') - \
                   _time_at(data, 'start uploading')
-    return upload_time
+    return upload_time.seconds
 
 
 def _download_time(data):
     download_time = _time_at(data, 'finish downloading') - \
                     _time_at(data, 'start downloading')
     return download_time.seconds
-
-
-def _find_msg(msgs, str):
-    return filter(lambda x: str in x, msgs)[0]
 
 
 def _get_service_offer(mapper, reducer):
