@@ -224,7 +224,7 @@ def _create_run_doc(cloud, canned_offer, time_records, products, service_offers)
             'timestamp': timestamp(),
             'execution_time': time_records['total'],
             'time_records': {
-                'mapper': time_records['mappers'],
+                'mappers': time_records['mappers'],
                 'reducer': time_records['reducer'],
                 'total': time_records['total']}
         }
