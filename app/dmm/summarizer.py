@@ -148,7 +148,7 @@ def _get_specs(id):
 
 
 def get_price(service_offers, time_records):
-    mapper_multiplicity = len(time_records['mapper'])
+    mapper_multiplicity = len(time_records['mappers'])
     time_total = time_records['total']
     try:
         mapper_unit_price = float(api.cimi_get(service_offers.get('mapper')).json['price:unitCost'])
