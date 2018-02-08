@@ -235,6 +235,7 @@ def _create_run_doc(cloud, offer, time_records, products, service_offers):
                 'total': time_records['total']}
         }
     }
+    logger.info('Persisting run summary: %s' % run)
 
     rep = es.update(index='sar',
                     doc_type='eo-proc',
