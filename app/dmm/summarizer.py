@@ -128,18 +128,15 @@ def _get_service_offer(mapper, reducer):
     return [so_m, so_r]
 
 
-def _get_products_list(data):
-    msg = _find_msg(data, "finish downloading")
-    msg_parts= msg.split(' -- ')
-    if len(msg_parts) >= 2:
-        prods = msg_parts[-1].split(' ')
-        return map(lambda x: x.strip(), prods)
-    else:
-        return []
-
-
-# def get_instance_type(id):
-#     _service_offer(0)['price:unitCost']
+def _get_products_list(log_entries_per_mapper):
+    products = []
+    for logs_list in log_entries_per_mapper:
+        msg = _find_msg(logs_list, "finish downloading")
+        msg_parts= msg.split(' -- ')
+        if len(msg_parts) >= 2:
+            prods = msg_parts[-1].split(' ')
+            products += map(lambda x: x.strip(), prods)
+    return products
 
 
 def _service_offer(id):
@@ -152,7 +149,7 @@ def _get_specs(id):
 
 
 def get_price(ids, time_records):
-    mapper_multiplicity = len(time_records['mapper'])
+    mapper_multiplicity = len(time_records['mappers'])
     time = time_records['total']
     try:
         mapper_unit_price = float(api.cimi_get(ids[0]).json['price:unitCost'])
@@ -245,8 +242,8 @@ def _create_run_doc(cloud, offer, time_records, products, service_offers):
 
 def summarize_run(duid, cloud, offer):
     logger.info("Running summarizer: %s, %s, %s" % (duid, cloud, offer))
-    response = _query_run(duid, cloud)
-    mappers, reducer = _div_node(response['hits'])
+    run = _query_run(duid, cloud)
+    mappers, reducer = _div_node(run['hits'])
     logger.info('summarize_run mappers: %s' % mappers)
     logger.info('summarize_run reducer: %s' % reducer)
     mappers_data_dict, reducer_data = _extract_node_data(mappers, reducer, duid)
@@ -254,7 +251,7 @@ def summarize_run(duid, cloud, offer):
     logger.info('summarize_run reducer_data: %s' % reducer_data)
 
     time_records = _compute_time_records(mappers_data_dict.values(), reducer_data, duid)
-    products = filter(lambda x: _get_products_list(x), mappers_data_dict.values())
+    products = _get_products_list(mappers_data_dict.values())
     service_offers = _get_service_offer(mappers, reducer)
 
     _create_run_doc(cloud, offer, time_records, products, service_offers)
