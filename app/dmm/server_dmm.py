@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import traceback
 
@@ -15,7 +16,7 @@ from threading import Thread
 
 import lib_access as sc
 import decision_making_module as dmm
-import summarizer as summarizer
+import summarizer
 from log import get_logger
 
 logger = get_logger(name='dmm-server')
@@ -355,27 +356,28 @@ def internal_error(exception):
 
 @app.route('/cost', methods=['GET'])
 def sla_cost():
-    data_admin = {}
-    for c in get_user_connectors(ss_username):
-        req = '/'.join([elastic_host, 'sar', doc_type, c])
-        item = requests.get(req).json()
-        logger.info(item)
-        if item.get('status') != 200:
+    """Returns costs per connector per canned product."""
+    costs = {}
+    for connector in get_user_connectors(ss_username):
+        req = '/'.join([elastic_host, 'sar', doc_type, connector])
+        resp = requests.get(req).json()
+        logger.info('SLA cost from ES: %s' % resp)
+        if ('status' in resp) and resp.get('status') != 200:
             error_msg = 'Failed getting data from backend.'
-            error = {'error': error_msg, 'reason': item['error']['reason']}
+            error = {'error': error_msg, 'reason': resp['error']['reason']}
             logger.warn(error)
             return Response(error_msg, status=500)
-        if item['found']:
-            logger.info('SLA cost found item: %s' % item)
-            item = item['_source']
-            for k, v in item.items():
+        docs = {}
+        if resp['found']:
+            docs = resp['_source']
+            for k, v in docs.items():
                 specs = _format_specs(v['components'])
-                ids = _vm_service_offers(c, specs)
-                item[k]['price'] = dmm.get_price(ids.values(), v['time_records'])
-        data_admin[c] = item
+                offers = _vm_service_offers(connector, specs)
+                docs[k]['price'] = summarizer.get_price(offers, v['time_records'])
+        costs[connector] = docs
+    logger.info('Current SLA costs: %s' % costs)
 
-    resp = Response(data_admin, status=200, mimetype='application/json')
-    return resp
+    return Response(json.dumps(costs), status=200, mimetype='application/json')
 
 
 ''' initialization by the system admin :
@@ -498,3 +500,4 @@ if __name__ == '__main__':
     ss_password = config_get('ss_password')
     ss_api.login_internal(ss_username, ss_password)
     app.run(host="127.0.0.1", port=int("8080"))
+

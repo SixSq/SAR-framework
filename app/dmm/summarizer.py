@@ -124,8 +124,7 @@ def _download_time(data):
 def _get_service_offer(mapper, reducer):
     so_m = str(mapper[0]['_source']['fields']['service-offer'])
     so_r = str(reducer[0]['_source']['fields']['service-offer'])
-
-    return [so_m, so_r]
+    return {'mapper': so_m, 'reducer': so_r}
 
 
 def _get_products_list(log_entries_per_mapper):
@@ -148,23 +147,21 @@ def _get_specs(id):
     return [js['resource:vcpu'], js['resource:ram'], js['resource:disk']]
 
 
-def get_price(ids, time_records):
-    mapper_multiplicity = len(time_records['mappers'])
-    time = time_records['total']
+def get_price(service_offers, time_records):
+    mapper_multiplicity = len(time_records['mapper'])
+    time_total = time_records['total']
     try:
-        mapper_unit_price = float(api.cimi_get(ids[0]).json['price:unitCost'])
-        reducer_unit_price = float(api.cimi_get(ids[1]).json['price:unitCost'])
-        logger.info("Mapper price:" + str(mapper_unit_price))
+        mapper_unit_price = float(api.cimi_get(service_offers.get('mapper')).json['price:unitCost'])
+        reducer_unit_price = float(api.cimi_get(service_offers.get('reducer')).json['price:unitCost'])
     except TypeError:
         logger.warn("No pricing available.")
         return 0
 
-    if api.cimi_get(ids[0]).json['price:billingPeriodCode'] == 'HUR':
-        time = math.ceil(float(time / 3600))
+    if api.cimi_get(service_offers.get('mapper')).json['price:billingPeriodCode'] == 'HUR':
+        time_total = math.ceil(float(time_total / 3600))
     else:
-        time = float(time / 3600)
-    cost = time * ((mapper_unit_price * mapper_multiplicity)
-                   + reducer_unit_price)
+        time_total = float(time_total / 3600)
+    cost = time_total * ((mapper_unit_price * mapper_multiplicity) + reducer_unit_price)
     return cost
 
 
@@ -217,11 +214,11 @@ def _query_run(duid, cloud):
     return es.search(index='_all', body=query, size=300)
 
 
-def _create_run_doc(cloud, offer, time_records, products, service_offers):
+def _create_run_doc(cloud, canned_offer, time_records, products, service_offers):
     run = {
-        offer: {
-            'components': {'mapper': _get_specs(service_offers[0]),
-                           'reducer': _get_specs(service_offers[1])},
+        canned_offer: {
+            'components': {'mapper': _get_specs(service_offers.get('mapper')),
+                           'reducer': _get_specs(service_offers.get('reducer'))},
             'products': products,
             'price': '%.5f' % (get_price(service_offers, time_records)),
             'timestamp': timestamp(),
@@ -240,8 +237,8 @@ def _create_run_doc(cloud, offer, time_records, products, service_offers):
                     body={"doc": run})
 
 
-def summarize_run(duid, cloud, offer):
-    logger.info("Running summarizer: %s, %s, %s" % (duid, cloud, offer))
+def summarize_run(duid, cloud, canned_offer):
+    logger.info("Running summarizer: %s, %s, %s" % (duid, cloud, canned_offer))
     run = _query_run(duid, cloud)
     mappers, reducer = _div_node(run['hits'])
     logger.info('summarize_run mappers: %s' % mappers)
@@ -254,8 +251,8 @@ def summarize_run(duid, cloud, offer):
     products = _get_products_list(mappers_data_dict.values())
     service_offers = _get_service_offer(mappers, reducer)
 
-    _create_run_doc(cloud, offer, time_records, products, service_offers)
-    logger.info("Done summarizer: %s, %s, %s" % (duid, cloud, offer))
+    _create_run_doc(cloud, canned_offer, time_records, products, service_offers)
+    logger.info("Done summarizer: %s, %s, %s" % (duid, cloud, canned_offer))
 
 
 if __name__ == '__main__':
