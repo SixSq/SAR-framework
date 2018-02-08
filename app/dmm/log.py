@@ -1,4 +1,5 @@
 import logging
+from utils import config_get
 
 LOG_LEVEL = logging.INFO
 LOG_FILE = 'eo-dmm.log'
@@ -8,7 +9,12 @@ FORMAT = '%(asctime)s{0}%(name)s{0}%(levelname)s{0}%(message)s'.format(FORMAT_FI
 FORMAT_DATE = '%Y-%m-%dT%H:%M:%SZ'
 
 
-def get_logger(name=__name__, log_level=LOG_LEVEL):
+def get_logger(name=__name__, log_level=None):
+    if log_level is None:
+        try:
+            log_level = logging.getLevelName(config_get('log_level').strip())
+        except Exception:
+            log_level = LOG_LEVEL
     logging.basicConfig(filename=LOG_FILE, format=FORMAT,
                         datefmt=FORMAT_DATE, level=log_level)
     logger = logging.getLogger(name)

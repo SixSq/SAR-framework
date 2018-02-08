@@ -3,8 +3,6 @@ import json
 import time
 import traceback
 
-from ConfigParser import SafeConfigParser
-
 from flask import Flask, request, Response, send_from_directory
 from elasticsearch import Elasticsearch
 from slipstream_api import Api
@@ -17,13 +15,10 @@ from threading import Thread
 import lib_access as sc
 import decision_making_module as dmm
 import summarizer
+from utils import config_get
 from log import get_logger
 
 logger = get_logger(name='dmm-server')
-
-CONFIG_FILE = 'dmm.conf'
-
-config_parser = None
 
 # {"host": "sos.exo.io",
 #  "bucket": "eodata_output",
@@ -118,10 +113,14 @@ def wait_product(duid, cloud, offer, time_limit):
         t = watch_execution_time(dpl_data.started_at)
         logger.info("Deployment %s. Waiting state '%s' of '%s'. Time elapsed: %s. SLA time left: %s" %
                     (duid, states_final, str(dpl_data), t, int(time_limit) - int(t)))
-        if (t >= time_limit) or dpl_data.status in ["cancelled", "aborted"]:
+        if t >= time_limit:
             cancel_deployment(duid)
             msg = "Deployment %s. SLA time bound %s sec exceeded. Deployment is cancelled." % \
                   (duid, time_limit)
+            logger.warn(msg)
+            return msg
+        elif dpl_data.status in ["cancelled", "aborted"]:
+            msg = "Deployment %s. Stop waiting. Deployment is in %s state." % (duid, dpl_data.status)
             logger.warn(msg)
             return msg
 
@@ -361,7 +360,7 @@ def sla_cost():
     for connector in get_user_connectors(ss_username):
         req = '/'.join([elastic_host, 'sar', doc_type, connector])
         resp = requests.get(req).json()
-        logger.info('SLA cost from ES: %s' % resp)
+        logger.debug('SLA cost from ES: %s' % resp)
         if ('status' in resp) and resp.get('status') != 200:
             error_msg = 'Failed getting data from backend.'
             error = {'error': error_msg, 'reason': resp['error']['reason']}
@@ -375,7 +374,7 @@ def sla_cost():
                 offers = _vm_service_offers(connector, specs)
                 docs[k]['price'] = summarizer.get_price(offers, v['time_records'])
         costs[connector] = docs
-    logger.info('Current SLA costs: %s' % costs)
+    logger.debug('Current SLA costs: %s' % costs)
 
     return Response(json.dumps(costs), status=200, mimetype='application/json')
 
@@ -430,7 +429,7 @@ def sla_init():
 
 
 @app.route('/run', methods=['POST'])
-def sla_cli():
+def sla_run():
     index = 'sar'
 
     try:
@@ -479,20 +478,6 @@ def sla_cli():
 
     resp = Response(msg, status=status, mimetype='application/json')
     return resp
-
-
-def get_conf_parser(fn):
-    global config_parser
-    if config_parser is None:
-        config_parser = SafeConfigParser()
-        config_parser.optionxform = str
-        config_parser.read(fn)
-    return config_parser
-
-
-def config_get(opt, default=''):
-    parser = get_conf_parser(CONFIG_FILE)
-    return parser.get('default', opt, default)
 
 
 if __name__ == '__main__':
