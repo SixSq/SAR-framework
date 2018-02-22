@@ -151,14 +151,16 @@ def _get_specs(id):
 def get_price(service_offers, time_records):
     mapper_multiplicity = len(time_records['mappers'])
     time_total = time_records['total']
+    mapper_so = api.cimi_get(service_offers.get('mapper'))
+    reducer_so = api.cimi_get(service_offers.get('reducer'))
     try:
-        mapper_unit_price = float(api.cimi_get(service_offers.get('mapper')).json['price:unitCost'])
-        reducer_unit_price = float(api.cimi_get(service_offers.get('reducer')).json['price:unitCost'])
-    except TypeError:
-        logger.warn("No pricing available.")
+        mapper_unit_price = float(mapper_so.json['price:unitCost'])
+        reducer_unit_price = float(reducer_so.json['price:unitCost'])
+    except (TypeError, AttributeError) as ex:
+        logger.warn("No pricing available with: %s" % ex)
         return 0
 
-    if api.cimi_get(service_offers.get('mapper')).json['price:billingPeriodCode'] == 'HUR':
+    if mapper_so.json['price:billingPeriodCode'] == 'HUR':
         time_total = math.ceil(float(time_total / 3600))
     else:
         time_total = float(time_total / 3600)
