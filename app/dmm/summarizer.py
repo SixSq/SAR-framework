@@ -66,6 +66,7 @@ def _get_dpl_state_times(duid):
     for e in events:
         states_times[e.content.get('state')] = \
             datetime.strptime(e.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+    logger.debug('depl %s state times: %s' % (duid, states_times))
     return states_times
 
 def _intra_node_time(data, dpl_state_times):
