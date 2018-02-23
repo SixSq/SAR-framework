@@ -42,7 +42,7 @@ def query_db(cloud, time, offer):
 
 def _prod_spec(r, spec):
     spec[0:2] = [math.ceil(float(c * r)) for c in spec[0:2]]
-    return (map(int, spec))
+    return map(int, spec)
 
 
 def dmm(cloud, time, offer, ssapi=None):

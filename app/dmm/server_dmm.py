@@ -274,7 +274,7 @@ def _get_vm_so(specs, clouds, name):
     resp = sc.request_vm(ss_api, specs, clouds)
     so_key = 'serviceOffers'
     if (so_key not in resp) or (len(resp[so_key]) < 1):
-        raise Exception('Failed to find SOs for %s %s on clouds %s.' % (name, specs, clouds))
+        raise Exception('Failed to find SOs for %s with specs %s on clouds %s.' % (name, specs, clouds))
     sos = resp[so_key]
     logger.debug('SOs for %s with specs (%s), clouds (%s): %s' % (name, specs, clouds, sos))
     return sos[0]['id']
