@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-server=http://147.228.242.171:81
+server=http://<server>
 
-# POST /cli
-curl -H "Content-Type: application/json" -X POST $server/cli -d '{
+# POST /dmm/run
+curl -H "Content-Type: application/json" -X POST $server/dmm/run -d '{
    "SLA": {
         "requirements": [1200, "CannedOffer_1"],
         "product_list": ["S1A_IW_GRDH_1SDV_20151226T182813_20151226T182838_009217_00D48F_5D5F",
@@ -19,8 +19,8 @@ curl -H "Content-Type: application/json" -X POST $server/cli -d '{
   }'
 
 
-# POST /init
-curl -H "Content-Type: application/json" -X POST $server/init -d '{
+# POST /dmm/init
+curl -H "Content-Type: application/json" -X POST $server/dmm/init -d '{
   "specs_vm":{
     "mapper":[4,16000,100],
     "reducer":[1,1000,50]
@@ -35,5 +35,5 @@ curl -H "Content-Type: application/json" -X POST $server/init -d '{
 }'
 
 
-# GET /cost
-curl -H "Accept: application/json" $server/cost
+# GET /dmm/cost
+curl -H "Accept: application/json" $server/dmm/cost
