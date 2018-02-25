@@ -446,8 +446,8 @@ def sla_run():
         sla = data['SLA']
         logger.info("SLA: %s" % sla)
         product_list = sla['product_list']
-        time = sla['requirements'][0]
-        offer = sla['requirements'][1]
+        max_time = sla['requirements'][0]
+        canned_offer_name = sla['requirements'][1]
         data_loc = find_data_loc(ss_api, product_list)
         logger.info("Data located in: %s" % data_loc)
         data_loc = _check_BDB_cloud(index, data_loc)
@@ -455,21 +455,21 @@ def sla_run():
         msg = ""
         status = ""
 
-        cloud_ranking = dmm.dmm(data_loc, time, offer)
+        cloud_ranking = dmm.dmm(data_loc, max_time, canned_offer_name)
 
         if data_loc and cloud_ranking:
             msg = "SLA accepted! "
             status = "201"
             cloud_winner = cloud_ranking[0]
 
-            logger.info("cloud ranking: %s" % cloud_ranking[0:3])
+            logger.info("Top 3 cloud ranking: %s" % cloud_ranking[0:3])
             serviceOffers = {'mapper': cloud_winner[1],
                              'reducer': cloud_winner[2]}
             deploy_run(cloud_winner[0],
                        product_list,
                        serviceOffers,
-                       offer,
-                       time)  # offer
+                       canned_offer_name,
+                       max_time)  # offer
 
         else:
             msg = "Data not found in clouds!\n"
