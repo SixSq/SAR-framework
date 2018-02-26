@@ -7,10 +7,11 @@ from collections import defaultdict
 from elasticsearch import Elasticsearch
 from slipstream_api import Api
 from log import get_logger
+from utils import config_get
 
 logger = get_logger(name='summarizer')
 
-api = Api()
+ss_api = Api()
 server_host = 'localhost'
 es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
@@ -61,7 +62,7 @@ def _provisioning_time(dpl_state_times):
 
 
 def _get_dpl_state_times(duid):
-    events = api.get_deployment_events(duid)
+    events = ss_api.get_deployment_events(duid)
     states_times = {}
     for e in events:
         states_times[e.content.get('state')] = \
@@ -140,19 +141,19 @@ def _get_products_list(log_entries_per_mapper):
 
 
 def _service_offer(id):
-    return api.cimi_get(id).json
+    return ss_api.cimi_get(id).json
 
 
 def _get_specs(id):
-    js = api.cimi_get(id).json
+    js = ss_api.cimi_get(id).json
     return [js['resource:vcpu'], js['resource:ram'], js['resource:disk']]
 
 
 def get_price(service_offers, time_records):
     mapper_multiplicity = len(time_records['mappers'])
     time_total = time_records['total']
-    mapper_so = api.cimi_get(service_offers.get('mapper'))
-    reducer_so = api.cimi_get(service_offers.get('reducer'))
+    mapper_so = ss_api.cimi_get(service_offers.get('mapper'))
+    reducer_so = ss_api.cimi_get(service_offers.get('reducer'))
     try:
         mapper_unit_price = float(mapper_so.json['price:unitCost'])
         reducer_unit_price = float(reducer_so.json['price:unitCost'])
@@ -260,4 +261,7 @@ def summarize_run(duid, cloud, canned_offer):
 
 if __name__ == '__main__':
     duid, cloud, offer = sys.argv[1:4]
+    ss_username = config_get('ss_username')
+    ss_password = config_get('ss_password')
+    ss_api.login_internal(ss_username, ss_password)
     summarize_run(duid, cloud, offer)

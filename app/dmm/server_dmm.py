@@ -507,5 +507,6 @@ if __name__ == '__main__':
     ss_username = config_get('ss_username')
     ss_password = config_get('ss_password')
     ss_api.login_internal(ss_username, ss_password)
+    summarizer.ss_api = ss_api
     app.run(host="127.0.0.1", port=int("8080"))
 
