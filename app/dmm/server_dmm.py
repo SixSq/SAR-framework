@@ -104,6 +104,14 @@ def watch_execution_time(start_time):
 
 
 def wait_product(duid, cloud, offer, time_limit):
+    """
+
+    :param duid:
+    :param cloud:
+    :param offer:
+    :param time_limit: in seconds
+    :return:
+    """
     dpl_data = ss_api.get_deployment(duid)
     output_id = ""
     states_final = ['ready', 'done', 'aborted']
@@ -227,12 +235,12 @@ def run_benchmarks(clouds_s3, specs_vm, product_list, offer):
         populate_db(index)
 
     deployments = []
-    for cloud, s3 in clouds_s3.iteritems():
+    for cloud, data_s3 in clouds_s3.iteritems():
         populate_db(index, cloud)
         vm_service_offers = _vm_service_offers(cloud, specs_vm)
-        deployment_id = deploy_run(cloud, s3, product_list, vm_service_offers, offer, 9999)
+        deployment_id = deploy_run(cloud, data_s3, product_list, vm_service_offers, offer, 9999)
         logger.info("Deployed run: %s on cloud %s with VM service offers %s and data in %s" %
-                    (deployment_id, cloud, str(vm_service_offers), s3))
+                    (deployment_id, cloud, str(vm_service_offers), data_s3))
         deployments.append(deployment_id)
     return deployments
 
@@ -246,8 +254,8 @@ def _check_BDB_cloud(index, clouds):
             valid_cloud.append(c)
 
     if not valid_cloud:
-        raise ValueError("Benchmark DB has no logs for %s go use "
-                         "POST on `SLA_INIT` to initialize." % clouds)
+        raise ValueError("Benchmark DB has no logs for %s you need to use "
+                         "POST on `/init` to initialize." % clouds)
     return valid_cloud
 
 
@@ -299,6 +307,16 @@ def _vm_service_offers(cloud, specs):
 
 
 def deploy_run(cloud, data_s3, product, vm_service_offers, offer, timeout):
+    """
+
+    :param cloud:
+    :param data_s3:
+    :param product:
+    :param vm_service_offers:
+    :param offer:
+    :param timeout: in seconds
+    :return:
+    """
     server_ip = config_get('dmm_ip')
     server_hostname = config_get('dmm_hostname')
     mapper_so = vm_service_offers['mapper']
@@ -446,16 +464,17 @@ def sla_run():
         sla = data['SLA']
         logger.info("SLA: %s" % sla)
         product_list = sla['product_list']
-        max_time = sla['requirements'][0]
+        # In requirements time is in minutes.
+        max_time_sec = sla['requirements'][0] * 60
         canned_offer_name = sla['requirements'][1]
         data_loc = find_data_loc(ss_api, product_list)
         logger.info("Data located in: %s" % data_loc)
-        data_loc = _check_BDB_cloud(index, data_loc)
+        data_clouds = _check_BDB_cloud(index, data_loc)
         logger.info("Benchmark run located in: %s" % data_loc)
         msg = ""
         status = ""
 
-        cloud_ranking = dmm.dmm(data_loc, max_time, canned_offer_name)
+        cloud_ranking = dmm.dmm(data_clouds, max_time_sec, canned_offer_name)
 
         if data_loc and cloud_ranking:
             msg = "SLA accepted! "
@@ -465,12 +484,13 @@ def sla_run():
             logger.info("Top 3 cloud ranking: %s" % cloud_ranking[0:3])
             serviceOffers = {'mapper': cloud_winner[1],
                              'reducer': cloud_winner[2]}
-            deploy_run(cloud_winner[0],
+            cloud = cloud_winner[0]
+            deploy_run(cloud,
+                       data_loc[cloud],
                        product_list,
                        serviceOffers,
                        canned_offer_name,
-                       max_time)  # offer
-
+                       max_time_sec)
         else:
             msg = "Data not found in clouds!\n"
             status = 412
