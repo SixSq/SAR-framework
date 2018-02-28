@@ -70,6 +70,7 @@ def _get_dpl_state_times(duid):
     logger.debug('depl %s state times: %s' % (duid, states_times))
     return states_times
 
+
 def _intra_node_time(data, dpl_state_times):
     provisioning_time = _provisioning_time(dpl_state_times)
 
@@ -133,7 +134,7 @@ def _get_products_list(log_entries_per_mapper):
     products = []
     for logs_list in log_entries_per_mapper:
         msg = _find_msg(logs_list, "finish downloading")
-        msg_parts= msg.split(' -- ')
+        msg_parts = msg.split(' -- ')
         if len(msg_parts) >= 2:
             prods = msg_parts[-1].split(' ')
             products += map(lambda x: x.strip(), prods)
@@ -241,6 +242,35 @@ def _create_run_doc(cloud, canned_offer, time_records, products, service_offers)
                     body={"doc": run})
 
 
+def _publish_benchmarks(cloud, canned_offer, time_records, products, service_offers):
+    for node_name in ['mapper', 'reducer']:
+        benchmark = {'eoproc:cannedoffer-name': canned_offer,
+                     'eoproc:cannedoffer-node-name': node_name,
+                     'eoproc:cannedoffer-products': products,
+                     'eoproc:cannedoffer-execution_time': time_records['total'],
+                     'eoproc:cannedoffer-cloud': cloud
+                     }
+        creds = {"credentials": [{"href": "credential/513d53b6-5aba-4b34-be28-21061ccb6890"}]}
+        so = {"serviceOffer": {"href": service_offers.get(node_name)}}
+        acl = {
+            "acl": {
+                "owner": {
+                    "principal": "super",
+                    "type": "USER"
+                },
+                "rules": [{
+                    "type": "ROLE",
+                    "principal": "USER",
+                    "right": "VIEW"
+                }]
+            }
+        }
+        benchmark.update(so)
+        benchmark.update(creds)
+        benchmark.update(acl)
+        ss_api.cimi_add('serviceBenchmarks', benchmark)
+
+
 def summarize_run(duid, cloud, canned_offer):
     logger.info("Running summarizer: %s, %s, %s" % (duid, cloud, canned_offer))
     run = _query_run(duid, cloud)
@@ -256,6 +286,7 @@ def summarize_run(duid, cloud, canned_offer):
     service_offers = _get_service_offer(mappers, reducer)
 
     _create_run_doc(cloud, canned_offer, time_records, products, service_offers)
+    _publish_benchmarks(cloud, canned_offer, time_records, products, service_offers)
     logger.info("Done summarizer: %s, %s, %s" % (duid, cloud, canned_offer))
 
 
