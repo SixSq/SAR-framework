@@ -4,6 +4,7 @@
 '''
 import re
 import sys
+from pprint import pprint as pp
 
 import requests
 from xml.etree import ElementTree
@@ -12,7 +13,8 @@ from slipstream.api import Api
 
 # Connect to Nuvla account
 api = Api()
-api.login('<nuvla_login>', '<nuvla_password>')
+# During deployment VM's cookie will be used.
+#api.login_apikey('<nuvla_login>', '<nuvla_password>')
 
 # INPUT ARGS FORMAT : ( "host_url", "bucket_name")
 # MANUAL INPUTS
@@ -31,9 +33,8 @@ def ls_bucket(host, bucket):
     """
     response = requests.get(host + '/' + bucket)
     tree = ElementTree.fromstring(response.content)
-    regex = re.compile('S1(.+?)SAFE')
+    regex = re.compile('S[12](.+?)SAFE')
     host_name = re.match(r"https://(.*)", host).group(0)[8:]
-    prd_list = []
     prd_dict = {}
 
     # SCRAPPER OF FILES URL ON THE S3 PUBLIC XML FILE
@@ -49,7 +50,8 @@ def ls_bucket(host, bucket):
                 prd_dict[c_key]['bucket'] = tree[0].text
                 prd_dict[c_key]['host'] = host_name
                 prd_dict[c_key]['conn'] = connectors[host_name]
-    return (prd_dict)
+                prd_dict[c_key]['name'] = 'SENTINEL-%s' % (c[0].text.startswith('S1') and '1' or '2')
+    return prd_dict
 
 
 def build_so(prod_info):
@@ -60,7 +62,7 @@ def build_so(prod_info):
     prd = {
         "connector": {
             "href": prod_info[1]['conn']},
-        "name": "SENTINEL-1 data product",
+        "name": "%s data product" % prod_info[1]['name'],
         "resource:platform": "S3",
         "acl": {"owner": {"type": "ROLE", "principal": "ADMIN"},
                 "rules": [{"principal": "USER", "right": "VIEW", "type": "ROLE"},
@@ -72,10 +74,15 @@ def build_so(prod_info):
         "resource:bucket": prod_info[1]['bucket'],
         "resource:host": prod_info[1]['host']
     }
-    # POST NEW SERVICE OFFER
+    print('Create new service offer >>>')
+    pp(prd)
     api.cimi_add("serviceOffers", prd)
 
 
 if __name__ == '__main__':
+    print('Processing >>> %s/%s' % (sys.argv[1], sys.argv[2]))
     d = ls_bucket(sys.argv[1], sys.argv[2])  # args: host, bucket
+    print('Products >>>')
+    pp(d)
     map(build_so, d.items())
+    print('Registration done.')
