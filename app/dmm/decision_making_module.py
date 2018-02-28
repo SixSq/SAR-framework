@@ -43,7 +43,7 @@ def dmm(clouds, max_time_sec, canned_offer_name):
     :param canned_offer_name: canned offer name
     :return: cheapest found benchmark
     """
-    # TODO: if performance data is stored as SOs in SC on SS use api to get it.
+    # TODO: if performance data is stored in benchmark resource on SS use api to get it.
     ranking = []
     logger.info('Ranking services offers.')
     for cloud in clouds:

@@ -477,7 +477,7 @@ def sla_run():
         cloud_ranking = dmm.dmm(data_clouds, max_time_sec, canned_offer_name)
 
         if data_loc and cloud_ranking:
-            msg = "SLA accepted! "
+            msg = "SLA accepted!"
             status = "201"
             cloud_winner = cloud_ranking[0]
 
@@ -492,14 +492,17 @@ def sla_run():
                        canned_offer_name,
                        max_time_sec)
         else:
-            msg = "Data not found in clouds!\n"
+            if not data_loc:
+                msg = "Data not found in clouds!"
+            else:
+                msg = "Failed to find cloud satisfying your SLA: %s!" % sla['requirements']
             status = 412
     except ValueError as err:
         msg = "Value error: {0} ".format(err)
         status = "404"
         logger.info("Value error: {0} ".format(err))
 
-    resp = Response(msg, status=status, mimetype='application/json')
+    resp = Response(msg, status=status, mimetype='text/plain')
     return resp
 
 
