@@ -14,13 +14,15 @@ from slipstream.api import Api
 # Connect to Nuvla account
 api = Api()
 # During deployment VM's cookie will be used.
-#api.login_apikey('<nuvla_login>', '<nuvla_password>')
+# api.login_apikey('<nuvla_login>', '<nuvla_password>')
 
 # INPUT ARGS FORMAT : ( "host_url", "bucket_name")
 # MANUAL INPUTS
 
-connectors = {'sos.exo.io': 'exoscale-ch-gva',
-              's3-eu-west-1.amazonaws.com': 'ec2-eu-west'}
+connectors = {
+    'sos-ch-dk-2.exo.io': 'exoscale-ch-gva',
+    'sos.exo.io': 'exoscale-ch-gva',
+    's3-eu-west-1.amazonaws.com': 'ec2-eu-west'}
 
 
 def ls_bucket(host, bucket):
