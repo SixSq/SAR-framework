@@ -103,12 +103,12 @@ def watch_execution_time(start_time):
     return delta.seconds
 
 
-def wait_product(duid, cloud, offer, time_limit):
+def wait_product(duid, cloud, canned_offer_name, time_limit):
     """
 
     :param duid:
     :param cloud:
-    :param offer:
+    :param canned_offer_name:
     :param time_limit: in seconds
     :return:
     """
@@ -139,7 +139,7 @@ def wait_product(duid, cloud, offer, time_limit):
 
     logger.info("Deployment %s. Finished waiting loop in state: %s." % (duid, dpl_data.status))
 
-    summarizer.summarize_run(duid, cloud, offer)
+    summarizer.summarize_run(duid, cloud, canned_offer_name)
 
     msg = "Deployment %s. Product %s delivered!" % (duid, output_id)
     logger.info(msg)
@@ -228,7 +228,7 @@ def populate_db(index, id=""):
     return rep
 
 
-def run_benchmarks(clouds_s3, specs_vm, product_list, offer):
+def run_benchmarks(clouds_s3, specs_vm, product_list, canned_offer_name):
     index = 'sar'
     req_index = requests.get(elastic_host + '/' + index)
     if not req_index:
@@ -238,7 +238,7 @@ def run_benchmarks(clouds_s3, specs_vm, product_list, offer):
     for cloud, data_s3 in clouds_s3.iteritems():
         populate_db(index, cloud)
         vm_service_offers = _vm_service_offers(cloud, specs_vm)
-        deployment_id = deploy_run(cloud, data_s3, product_list, vm_service_offers, offer, 9999)
+        deployment_id = deploy_run(cloud, data_s3, product_list, vm_service_offers, canned_offer_name, 9999)
         logger.info("Deployed run: %s on cloud %s with VM service offers %s and data in %s" %
                     (deployment_id, cloud, str(vm_service_offers), data_s3))
         deployments.append(deployment_id)
@@ -306,14 +306,14 @@ def _vm_service_offers(cloud, specs):
     return service_offers
 
 
-def deploy_run(cloud, data_s3, product, vm_service_offers, offer, timeout):
+def deploy_run(cloud, data_s3, products_list, vm_service_offers, canned_offer_name, timeout):
     """
 
     :param cloud:
     :param data_s3:
-    :param product:
+    :param products_list:
     :param vm_service_offers:
-    :param offer:
+    :param canned_offer_name:
     :param timeout: in seconds
     :return:
     """
@@ -324,7 +324,7 @@ def deploy_run(cloud, data_s3, product, vm_service_offers, offer, timeout):
 
     if mapper_so and reducer_so:
         mapper_params = {'service-offer': mapper_so,
-                         'product-list': ' '.join(product),
+                         'product-list': ' '.join(products_list),
                          's3-host': data_s3['s3host'],
                          's3-bucket': data_s3['s3bucket'],
                          'server_hn': server_hostname,
@@ -339,7 +339,7 @@ def deploy_run(cloud, data_s3, product, vm_service_offers, offer, timeout):
             reducer_params['s3-secret-key'] = result_s3_creds.get('secret', '')
         comps_params = {'mapper': mapper_params,
                         'reducer': reducer_params}
-        comps_counts = {'mapper': len(product),
+        comps_counts = {'mapper': len(products_list),
                         'reducer': 1}
         proc_module = config_get('ss_module_proc_sar')
         comps_clouds = {'mapper': cloud, 'reducer': cloud}
@@ -351,7 +351,7 @@ def deploy_run(cloud, data_s3, product, vm_service_offers, offer, timeout):
                                       multiplicity=comps_counts,
                                       tags='EOproc',
                                       keep_running='never')
-        daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud, offer, timeout))
+        daemon_watcher = Thread(target=wait_product, args=(deployment_id, cloud, canned_offer_name, timeout))
         daemon_watcher.setDaemon(True)
         daemon_watcher.start()
         return '%s/run/%s' % (ss_api.endpoint, deployment_id)
@@ -425,7 +425,7 @@ def sla_init():
     specs_vm = _format_specs(data['specs_vm'])
     global result_s3_creds
     result_s3_creds = data['result']['s3_credentials']
-    offer = "CannedOffer_1"
+    canned_offer = data['canned_offer']
     logger.info("Instance sizes: " + str(specs_vm))
 
     try:
@@ -436,7 +436,7 @@ def sla_init():
             raise ValueError("The data has not been found in any connector \
                              associated with the Nuvla account %s" % ss_username)
         logger.info("Data located in: %s" % clouds_s3)
-        deployments = run_benchmarks(clouds_s3, specs_vm, product_list, offer)
+        deployments = run_benchmarks(clouds_s3, specs_vm, product_list, canned_offer)
         msg = "Cloud %s are currently being benchmarked with %s" % \
               (', '.join(clouds_s3.keys()), ', '.join(deployments))
         status = "201"
